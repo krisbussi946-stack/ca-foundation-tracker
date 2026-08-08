@@ -8,7 +8,13 @@ app = Flask(__name__)
 app.secret_key = "ca_foundation_jan27_secret_key"
 
 # Database Path
-DB_PATH = "/mnt/chromeos/shared/removable/1TB/ca_tracker_db/castudy.db"
+DB_PATH = "castudy.db"
+
+def get_db_connection():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
 
 # 🔑 ADMIN DETAILS
 ADMIN_PHONE = "9693471716"        # <--- Yahan apna 10-digit Mobile Number daalein
@@ -17,11 +23,6 @@ ADMIN_PASSWORD = "RajubangyaCA@380"  # <--- Strong Admin Password
 # Telegram Channel / DM Link
 TELEGRAM_LINK = "https://t.me/+T00sbNCe1eU3ZWQ1" # <--- Yahan apna Telegram Link daalein
 
-def get_db_connection():
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
 
 def init_db():
     conn = get_db_connection()
