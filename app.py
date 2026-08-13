@@ -5,7 +5,7 @@ from flask import Flask, render_template_string, request, redirect, url_for, ses
 
 app = Flask(__name__)
 app.secret_key = 'ca_foundation_jan2027_super_secret_key'
-app.permanent_session_lifetime = timedelta(days=60)  # 60 Days Persistent Login
+app.permanent_session_lifetime = timedelta(days=60)
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'castudy.db')
 
@@ -17,6 +17,8 @@ def get_db():
 def init_db():
     conn = get_db()
     cursor = conn.cursor()
+    
+    # 1. Users Table Create
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -26,6 +28,17 @@ def init_db():
             pin TEXT NOT NULL
         )
     ''')
+    
+    # Check & Auto-Add DOB column if missing in old database
+    cursor.execute("PRAGMA table_info(users)")
+    columns = [column[1] for column in cursor.fetchall()]
+    if 'dob' not in columns:
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN dob TEXT")
+        except Exception:
+            pass
+
+    # 2. Progress Table Create
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS user_progress (
             user_id INTEGER,
@@ -117,7 +130,7 @@ HTML_TEMPLATE = '''
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h4 class="m-0 text-warning">🎓 CA Foundation Jan 2027 Planner</h4>
             <div>
-                <span class="me-3 text-info">👤 {{ user.name }} ({{ user.mobile }})</span>
+                <span class="me-3 text-info">👤 {{ user.name if user else 'Student' }}</span>
                 <a href="{{ url_for('logout') }}" class="btn btn-outline-danger btn-sm">Logout</a>
             </div>
         </div>
@@ -227,7 +240,6 @@ HTML_TEMPLATE = '''
 </html>
 '''
 
-# ULTRA HIGH CONTRAST LOGIN FORM
 LOGIN_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -287,27 +299,22 @@ LOGIN_TEMPLATE = '''
             padding: 12px;
             border-radius: 8px;
             font-size: 1.05rem;
-            transition: all 0.2s ease;
-        }
-        .btn-custom:hover {
-            background: linear-gradient(135deg, #fbbf24, #f59e0b);
-            color: #000000;
         }
     </style>
 </head>
 <body>
     <div class="login-card p-4 shadow-lg">
-        <h3 class="text-center text-warning mb-1 font-weight-bold">🎓 Student Portal</h3>
+        <h3 class="text-center text-warning mb-1 fw-bold">🎓 Student Portal</h3>
         <p class="text-center text-light mb-4" style="font-size: 0.85rem;">CA Foundation Jan 2027 Planner</p>
 
         {% if error %}
-            <div class="alert alert-danger p-2 text-center font-weight-bold" style="font-size: 0.9rem;">{{ error }}</div>
+            <div class="alert alert-danger p-2 text-center fw-bold" style="font-size: 0.9rem;">{{ error }}</div>
         {% endif %}
 
         <form method="POST">
             <div class="mb-3">
                 <label class="form-label">📱 Mobile Number</label>
-                <input type="text" name="mobile" class="form-control custom-input" placeholder="Enter 10-digit mobile number" required autocomplete="off">
+                <input type="text" name="mobile" class="form-control custom-input" placeholder="Enter Mobile Number" required autocomplete="off">
             </div>
 
             <div class="mb-3">
@@ -346,10 +353,10 @@ def home():
         return render_template_string(HTML_TEMPLATE, user=user, syllabus=SYLLABUS, user_progress=progress_data)
 
     if request.method == 'POST':
-        mobile = request.form.get('mobile').strip()
+        mobile = request.form.get('mobile', '').strip()
         name = request.form.get('name', '').strip()
         dob = request.form.get('dob', '').strip()
-        pin = request.form.get('pin').strip()
+        pin = request.form.get('pin', '').strip()
 
         conn = get_db()
         cursor = conn.cursor()
@@ -357,7 +364,7 @@ def home():
         user = cursor.fetchone()
 
         if user:
-            if user['pin'] == pin:
+            if str(user['pin']) == str(pin):
                 session.permanent = True
                 session['user_id'] = user['id']
                 conn.close()
