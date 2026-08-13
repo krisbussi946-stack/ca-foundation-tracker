@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from flask import Flask, render_template_string, request, redirect, url_for, session, jsonify
 
 app = Flask(__name__)
-app.secret_key = 'ca_foundation_jan2027_super_secret_key'
+app.secret_key = 'ca_foundation_jan2027_super_secret_key_v2'
 app.permanent_session_lifetime = timedelta(days=60)
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'castudy.db')
@@ -18,7 +18,7 @@ def init_db():
     conn = get_db()
     cursor = conn.cursor()
     
-    # 1. Users Table Create
+    # User Table Create
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,7 +29,7 @@ def init_db():
         )
     ''')
     
-    # Check & Auto-Add DOB column if missing in old database
+    # Migration Check for DOB Column
     cursor.execute("PRAGMA table_info(users)")
     columns = [column[1] for column in cursor.fetchall()]
     if 'dob' not in columns:
@@ -38,7 +38,7 @@ def init_db():
         except Exception:
             pass
 
-    # 2. Progress Table Create
+    # Progress Table Create
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS user_progress (
             user_id INTEGER,
@@ -53,7 +53,7 @@ def init_db():
 init_db()
 
 # ==========================================================
-# ACCURATE LECTURE SYLLABUS DATA
+# COMPLETE LECTURE SYLLABUS DATA
 # ==========================================================
 SYLLABUS = {
     "Accounting": [
@@ -130,7 +130,7 @@ HTML_TEMPLATE = '''
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h4 class="m-0 text-warning">🎓 CA Foundation Jan 2027 Planner</h4>
             <div>
-                <span class="me-3 text-info">👤 {{ user.name if user else 'Student' }}</span>
+                <span class="me-3 text-info">👤 {{ user_name }} ({{ user_mobile }})</span>
                 <a href="{{ url_for('logout') }}" class="btn btn-outline-danger btn-sm">Logout</a>
             </div>
         </div>
@@ -156,26 +156,28 @@ HTML_TEMPLATE = '''
         </div>
 
         {% for subject, units in syllabus.items() %}
+        {% set subject_idx = loop.index %}
         <div class="subject-card p-3">
             <h5 class="text-info mb-3">📚 {{ subject }}</h5>
-            <div class="accordion" id="accordion-{{ loop.index }}">
+            <div class="accordion" id="accordion-{{ subject_idx }}">
                 {% for unit_data in units %}
-                {% set unit_id = loop.index %}
+                {% set unit_idx = loop.index %}
                 <div class="accordion-item">
                     <h2 class="accordion-header">
-                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ loop.parent.index }}-{{ unit_id }}">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ subject_idx }}-{{ unit_idx }}">
                             {{ unit_data.unit }}
                         </button>
                     </h2>
-                    <div id="collapse-{{ loop.parent.index }}-{{ unit_id }}" class="accordion-collapse collapse">
+                    <div id="collapse-{{ subject_idx }}-{{ unit_idx }}" class="accordion-collapse collapse">
                         <div class="accordion-body">
                             <div class="row">
                                 {% for lec in unit_data.lectures %}
+                                {% set lec_idx = loop.index %}
                                 {% set lec_key = subject ~ '_' ~ unit_data.unit ~ '_' ~ lec %}
                                 <div class="col-md-4 col-sm-6 mb-2">
                                     <div class="form-check">
-                                        <input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ lec_key }}" id="chk-{{ loop.parent.parent.index }}-{{ loop.parent.index }}-{{ loop.index }}" {% if user_progress.get(lec_key) == 1 %}checked{% endif %}>
-                                        <label class="form-check-label text-light" for="chk-{{ loop.parent.parent.index }}-{{ loop.parent.index }}-{{ loop.index }}">
+                                        <input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ lec_key }}" id="chk-{{ subject_idx }}-{{ unit_idx }}-{{ lec_idx }}" {% if user_progress.get(lec_key) == 1 %}checked{% endif %}>
+                                        <label class="form-check-label text-light" for="chk-{{ subject_idx }}-{{ unit_idx }}-{{ lec_idx }}">
                                             {{ lec }}
                                         </label>
                                     </div>
@@ -344,13 +346,16 @@ def home():
     if 'user_id' in session:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE id = ?", (session['user_id'],))
-        user = cursor.fetchone()
+        cursor.execute("SELECT name, mobile FROM users WHERE id = ?", (session['user_id'],))
+        row = cursor.fetchone()
         
+        user_name = row['name'] if row else 'Student'
+        user_mobile = row['mobile'] if row else ''
+
         cursor.execute("SELECT item_id, status FROM user_progress WHERE user_id = ?", (session['user_id'],))
-        progress_data = {row['item_id']: row['status'] for row in cursor.fetchall()}
+        progress_data = {r['item_id']: r['status'] for r in cursor.fetchall()}
         conn.close()
-        return render_template_string(HTML_TEMPLATE, user=user, syllabus=SYLLABUS, user_progress=progress_data)
+        return render_template_string(HTML_TEMPLATE, user_name=user_name, user_mobile=user_mobile, syllabus=SYLLABUS, user_progress=progress_data)
 
     if request.method == 'POST':
         mobile = request.form.get('mobile', '').strip()
@@ -360,7 +365,7 @@ def home():
 
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE mobile = ?", (mobile,))
+        cursor.execute("SELECT id, pin FROM users WHERE mobile = ?", (mobile,))
         user = cursor.fetchone()
 
         if user:
