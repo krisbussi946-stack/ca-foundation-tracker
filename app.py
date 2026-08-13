@@ -17,7 +17,6 @@ def get_db():
 def init_db():
     conn = get_db()
     cursor = conn.cursor()
-    # Users Table with DOB as simple text
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -27,7 +26,6 @@ def init_db():
             pin TEXT NOT NULL
         )
     ''')
-    # Progress Tracking Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS user_progress (
             user_id INTEGER,
@@ -42,7 +40,7 @@ def init_db():
 init_db()
 
 # ==========================================================
-# ACCURATE LECTURE SYLLABUS DATA (NO BRAND NAMES)
+# ACCURATE LECTURE SYLLABUS DATA
 # ==========================================================
 SYLLABUS = {
     "Accounting": [
@@ -182,7 +180,6 @@ HTML_TEMPLATE = '''
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Countdown Clock Logic
         function updateCountdown() {
             const examDate = new Date("January 1, 2027 00:00:00").getTime();
             const now = new Date().getTime();
@@ -203,7 +200,6 @@ HTML_TEMPLATE = '''
         setInterval(updateCountdown, 1000);
         updateCountdown();
 
-        // Checkbox & Progress Bar Logic
         function calculateProgress() {
             const total = document.querySelectorAll('.lec-checkbox').length;
             const checked = document.querySelectorAll('.lec-checkbox:checked').length;
@@ -231,6 +227,7 @@ HTML_TEMPLATE = '''
 </html>
 '''
 
+# ULTRA HIGH CONTRAST LOGIN FORM
 LOGIN_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -240,32 +237,95 @@ LOGIN_TEMPLATE = '''
     <title>Login - CA Foundation Planner</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background-color: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px 0; }
-        .card { background-color: #1e293b; border: 1px solid #334155; border-radius: 15px; width: 100%; max-width: 420px; }
+        body { 
+            background: #090d16; 
+            color: #ffffff; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            min-height: 100vh; 
+            padding: 20px 0; 
+            font-family: 'Segoe UI', Roboto, sans-serif;
+        }
+        .login-card { 
+            background-color: #1e293b; 
+            border: 2px solid #3b82f6; 
+            border-radius: 16px; 
+            width: 100%; 
+            max-width: 420px; 
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+        }
+        .form-label {
+            color: #f1f5f9 !important;
+            font-weight: 600;
+            font-size: 0.95rem;
+            margin-bottom: 6px;
+        }
+        .custom-input {
+            background-color: #0f172a !important;
+            color: #ffffff !important;
+            border: 1px solid #475569 !important;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 1rem;
+        }
+        .custom-input:focus {
+            border-color: #38bdf8 !important;
+            box-shadow: 0 0 8px rgba(56, 189, 248, 0.4) !important;
+            background-color: #0f172a !important;
+            color: #ffffff !important;
+        }
+        .custom-input::placeholder {
+            color: #94a3b8 !important;
+            opacity: 1;
+        }
+        .btn-custom {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            border: none;
+            color: #000000;
+            font-weight: 700;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 1.05rem;
+            transition: all 0.2s ease;
+        }
+        .btn-custom:hover {
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            color: #000000;
+        }
     </style>
 </head>
 <body>
-    <div class="card p-4 shadow-lg">
-        <h3 class="text-center text-warning mb-4">🎓 Student Access</h3>
-        {% if error %}<div class="alert alert-danger p-2">{{ error }}</div>{% endif %}
+    <div class="login-card p-4 shadow-lg">
+        <h3 class="text-center text-warning mb-1 font-weight-bold">🎓 Student Portal</h3>
+        <p class="text-center text-light mb-4" style="font-size: 0.85rem;">CA Foundation Jan 2027 Planner</p>
+
+        {% if error %}
+            <div class="alert alert-danger p-2 text-center font-weight-bold" style="font-size: 0.9rem;">{{ error }}</div>
+        {% endif %}
+
         <form method="POST">
             <div class="mb-3">
-                <label class="form-label">Mobile Number</label>
-                <input type="text" name="mobile" class="form-control bg-dark text-light border-secondary" placeholder="Enter Mobile Number" required>
+                <label class="form-label">📱 Mobile Number</label>
+                <input type="text" name="mobile" class="form-control custom-input" placeholder="Enter 10-digit mobile number" required autocomplete="off">
             </div>
+
             <div class="mb-3">
-                <label class="form-label">Name (For New Registration)</label>
-                <input type="text" name="name" class="form-control bg-dark text-light border-secondary" placeholder="Enter Full Name">
+                <label class="form-label">👤 Full Name <span class="text-warning" style="font-size: 0.75rem;">(New Student)</span></label>
+                <input type="text" name="name" class="form-control custom-input" placeholder="Enter your full name" autocomplete="off">
             </div>
+
             <div class="mb-3">
-                <label class="form-label">Date of Birth (Direct Typing)</label>
-                <input type="text" name="dob" class="form-control bg-dark text-light border-secondary" placeholder="DD/MM/YYYY (e.g. 15/08/2005)">
+                <label class="form-label">🎂 Date of Birth</label>
+                <input type="text" name="dob" class="form-control custom-input" placeholder="DD/MM/YYYY (e.g. 15/08/2005)" autocomplete="off">
             </div>
-            <div class="mb-3">
-                <label class="form-label">4-Digit PIN</label>
-                <input type="password" name="pin" class="form-control bg-dark text-light border-secondary" placeholder="Set or Enter PIN" required>
+
+            <div class="mb-4">
+                <label class="form-label">🔑 4-Digit Security PIN</label>
+                <input type="password" name="pin" class="form-control custom-input" placeholder="Set or Enter 4-Digit PIN" required maxlength="4">
             </div>
-            <button type="submit" class="btn btn-warning w-100 fw-bold py-2">Login / Register</button>
+
+            <button type="submit" class="btn btn-custom w-100 shadow">Login / Register Now 🚀</button>
         </form>
     </div>
 </body>
@@ -304,11 +364,11 @@ def home():
                 return redirect(url_for('home'))
             else:
                 conn.close()
-                return render_template_string(LOGIN_TEMPLATE, error="Invalid PIN!")
+                return render_template_string(LOGIN_TEMPLATE, error="Invalid PIN! Please check and try again.")
         else:
             if not name:
                 conn.close()
-                return render_template_string(LOGIN_TEMPLATE, error="Please enter your name to register!")
+                return render_template_string(LOGIN_TEMPLATE, error="Please enter your Name to register new account!")
             cursor.execute("INSERT INTO users (mobile, name, dob, pin) VALUES (?, ?, ?, ?)", (mobile, name, dob, pin))
             conn.commit()
             user_id = cursor.lastrowid
