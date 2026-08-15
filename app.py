@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from flask import Flask, render_template_string, request, redirect, url_for, session, jsonify
 
 app = Flask(__name__)
-app.secret_key = 'ca_foundation_jan2027_master_secret_key'
+app.secret_key = 'ca_foundation_jan2027_master_chat_key'
 app.permanent_session_lifetime = timedelta(days=60)
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'castudy.db')
@@ -27,13 +27,6 @@ def init_db():
             manifestation_completed INTEGER DEFAULT 0
         )
     ''')
-    cursor.execute("PRAGMA table_info(users)")
-    cols = [c[1] for c in cursor.fetchall()]
-    if 'dob' not in cols:
-        cursor.execute("ALTER TABLE users ADD COLUMN dob TEXT")
-    if 'manifestation_completed' not in cols:
-        cursor.execute("ALTER TABLE users ADD COLUMN manifestation_completed INTEGER DEFAULT 0")
-
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS user_progress (
             user_id INTEGER,
@@ -42,13 +35,30 @@ def init_db():
             PRIMARY KEY (user_id, item_id)
         )
     ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS group_chats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            user_name TEXT,
+            message TEXT NOT NULL,
+            timestamp TEXT NOT NULL
+        )
+    ''')
+    
+    cursor.execute("PRAGMA table_info(users)")
+    cols = [c[1] for c in cursor.fetchall()]
+    if 'dob' not in cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN dob TEXT")
+    if 'manifestation_completed' not in cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN manifestation_completed INTEGER DEFAULT 0")
+
     conn.commit()
     conn.close()
 
 init_db()
 
 # ==========================================================
-# OFFICIAL ICAI SYLLABUS DATA (MAPPED FROM SCREENSHOTS)
+# ICAI OFFICIAL SYLLABUS DATA
 # ==========================================================
 ICAI_SYLLABUS = {
     "Paper-1: Accounting (Official ICAI Syllabus)": [
@@ -92,11 +102,8 @@ ICAI_SYLLABUS = {
     ]
 }
 
-# ==========================================================
-# PERSONAL LECTURE PLANNER DATA
-# ==========================================================
 PERSONAL_SYLLABUS = {
-    "Accounting (Lecture-by-Lecture Planner)": [
+    "Accounting (Lecture Planner)": [
         {"unit": "Unit 1: Accounts Basics (2 Lecs)", "lectures": ["Basics Lec 1", "Basics Lec 2"]},
         {"unit": "Unit 2: Accounting Process (10 Lecs)", "lectures": [f"Journal/Ledger/Trial/Subsidiary/CashBook Lec {i}" for i in range(1, 11)]},
         {"unit": "Unit 3: Depreciation & Amortisation (7 Lecs)", "lectures": [f"Depreciation Lec {i}" for i in range(1, 8)]},
@@ -111,7 +118,7 @@ PERSONAL_SYLLABUS = {
         {"unit": "Unit 12: Company Accounts (19 Lecs)", "lectures": [f"Company A/cs Lec {i}" for i in range(1, 20)]},
         {"unit": "Unit 13: Theoretical Framework (4 Lecs)", "lectures": [f"Theory Lec {i}" for i in range(1, 5)]}
     ],
-    "Quantitative Aptitude (Lecture-by-Lecture Planner)": [
+    "Quantitative Aptitude (Lecture Planner)": [
         {"unit": "Unit 1: Basic Mathematics (2 Lecs)", "lectures": ["Basic Math Lec 1", "Basic Math Lec 2"]},
         {"unit": "Unit 2: Mathematics of Finance (13 Lecs)", "lectures": [f"Math of Finance Lec {i}" for i in range(1, 14)]},
         {"unit": "Unit 3: Ratio, Proportion, Indices, Logarithm (9 Lecs)", "lectures": [f"Ratio & Log Lec {i}" for i in range(1, 10)]},
@@ -133,7 +140,7 @@ PERSONAL_SYLLABUS = {
         {"unit": "Unit 19: Sampling (3 Lecs)", "lectures": [f"Sampling Lec {i}" for i in range(1, 4)]},
         {"unit": "Unit 20: Differential & Integral Calculus (4 Lecs)", "lectures": [f"Calculus Lec {i}" for i in range(1, 5)]}
     ],
-    "Business Economics (Lecture-by-Lecture Planner)": [
+    "Business Economics (Lecture Planner)": [
         {"unit": "Unit 1: Basics (2 Lecs)", "lectures": ["Basics Lec 1", "Basics Lec 2"]},
         {"unit": "Unit 2: Indian Economy (5 Lecs)", "lectures": [f"Indian Economy Lec {i}" for i in range(1, 6)]},
         {"unit": "Unit 3: Public Finance (10 Lecs)", "lectures": [f"Public Finance Lec {i}" for i in range(1, 11)]},
@@ -146,7 +153,7 @@ PERSONAL_SYLLABUS = {
         {"unit": "Unit 10: National Income (14 Lecs)", "lectures": [f"National Income Lec {i}" for i in range(1, 15)]},
         {"unit": "Unit 11: Business Cycles (4 Lecs)", "lectures": [f"Business Cycles Lec {i}" for i in range(1, 5)]}
     ],
-    "Business Law (Lecture-by-Lecture Planner)": [
+    "Business Law (Lecture Planner)": [
         {"unit": "Category 1: Concept FastTrack Lectures (48 Lecs)", "lectures": [f"Law Concept Lec {i}" for i in range(1, 49)]},
         {"unit": "Category 2: Written Practice Sessions (24 Lecs)", "lectures": [f"Law Answer Writing Session {i}" for i in range(1, 25)]}
     ]
@@ -182,6 +189,8 @@ SHARED_LAYOUT_HEADER = '''
         .progress-bar-custom { background: linear-gradient(90deg, #3b82f6, #10b981); }
         .gold-input { color: #fbbf24 !important; font-weight: bold; background: #0f172a; border: 1px solid #f59e0b; }
         .manifestation-card { background: linear-gradient(135deg, #1e1b4b, #312e81); border: 2px solid #fbbf24; }
+        .chat-box { background: #1e293b; border: 1px solid #334155; border-radius: 12px; height: 350px; overflow-y: auto; padding: 15px; }
+        .chat-msg { background: #0f172a; border-left: 3px solid #38bdf8; padding: 8px 12px; border-radius: 6px; margin-bottom: 10px; }
     </style>
 </head>
 <body>
@@ -198,15 +207,16 @@ SHARED_LAYOUT_HEADER = '''
                 </div>
             </div>
 
-            <div class="d-flex align-items-center gap-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                {% if is_admin %}
+                    <a href="{{ url_for('admin_panel') }}" class="btn btn-danger font-weight-bold shadow-sm">🛡️ Admin Panel</a>
+                {% endif %}
+                <a href="{{ url_for('community_chat') }}" class="btn btn-success font-weight-bold shadow-sm">💬 Group Chat</a>
+                
                 {% if active_page == 'icai' %}
-                    <a href="{{ url_for('personal_planner') }}" class="btn btn-warning font-weight-bold shadow-sm">
-                        🎯 My Personal Lecture Planner Page ➔
-                    </a>
+                    <a href="{{ url_for('personal_planner') }}" class="btn btn-warning font-weight-bold shadow-sm">🎯 My Personal Planner ➔</a>
                 {% else %}
-                    <a href="{{ url_for('home') }}" class="btn btn-info font-weight-bold shadow-sm">
-                        📘 Official ICAI Tracker Page ➔
-                    </a>
+                    <a href="{{ url_for('home') }}" class="btn btn-info font-weight-bold shadow-sm">📘 ICAI Tracker Page ➔</a>
                 {% endif %}
                 <a href="{{ url_for('logout') }}" class="btn btn-outline-danger btn-sm">Logout</a>
             </div>
@@ -306,8 +316,11 @@ SHARED_LAYOUT_FOOTER = '''
             const total = document.querySelectorAll('.lec-checkbox').length;
             const checked = document.querySelectorAll('.lec-checkbox:checked').length;
             const percentage = total > 0 ? Math.round((checked / total) * 100) : 0;
-            document.getElementById('overall-percentage').innerText = percentage + '%';
-            document.getElementById('overall-bar').style.width = percentage + '%';
+            const elem = document.getElementById('overall-percentage');
+            if (elem) {
+                elem.innerText = percentage + '%';
+                document.getElementById('overall-bar').style.width = percentage + '%';
+            }
         }
         calculateOverallProgress();
 
@@ -407,6 +420,60 @@ PERSONAL_PAGE_TEMPLATE = SHARED_LAYOUT_HEADER + '''
     {% endfor %}
 ''' + SHARED_LAYOUT_FOOTER
 
+# DYNAMIC COMMUNITY GROUP CHAT TEMPLATE (SAFE & PRIVATE)
+CHAT_PAGE_TEMPLATE = SHARED_LAYOUT_HEADER + '''
+    <h4 class="text-warning mb-3">💬 Student Discussion Forum (Privacy Safe)</h4>
+    <div class="chat-box mb-3" id="chatWindow">
+        {% for msg in chat_messages %}
+        <div class="chat-msg">
+            <div class="d-flex justify-content-between">
+                <strong class="text-warning">👤 {{ msg.user_name }}</strong>
+                <small class="text-muted">{{ msg.timestamp }}</small>
+            </div>
+            <p class="m-0 text-light mt-1">{{ msg.message }}</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <form action="/send_chat" method="POST" class="d-flex gap-2">
+        <input type="text" name="message" class="form-control gold-input" placeholder="Type study question or motivation message..." required autocomplete="off">
+        <button type="submit" class="btn btn-warning font-weight-bold">Send 🚀</button>
+    </form>
+    <script>
+        const chatWin = document.getElementById('chatWindow');
+        chatWin.scrollTop = chatWin.scrollHeight;
+    </script>
+''' + SHARED_LAYOUT_FOOTER
+
+# ADMIN PANEL TEMPLATE (RESTRICTED TO ADMIN ONLY)
+ADMIN_PANEL_TEMPLATE = SHARED_LAYOUT_HEADER + '''
+    <h4 class="text-warning mb-3">🛡️ Admin Control Panel</h4>
+    <div class="table-responsive bg-dark p-3 rounded border border-secondary">
+        <table class="table table-dark table-hover">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Student Name</th>
+                    <th>Mobile Number</th>
+                    <th>DOB</th>
+                    <th>Progress (%)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in users_list %}
+                <tr>
+                    <td>{{ u.id }}</td>
+                    <td class="text-warning font-weight-bold">{{ u.name }}</td>
+                    <td>{{ u.mobile }}</td>
+                    <td>{{ u.dob }}</td>
+                    <td><span class="badge bg-success fs-6">{{ u.progress }}%</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+''' + SHARED_LAYOUT_FOOTER
+
 LOGIN_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -494,9 +561,12 @@ def home():
         cursor.execute("SELECT item_id, status FROM user_progress WHERE user_id = ?", (session['user_id'],))
         progress_data = {r['item_id']: r['status'] for r in cursor.fetchall()}
         conn.close()
+        
+        is_admin = (user_mobile == '9693471716')
         return render_template_string(
             ICAI_PAGE_TEMPLATE, 
             active_page='icai',
+            is_admin=is_admin,
             user_name=user_name, 
             user_mobile=user_mobile, 
             user_dob=user_dob,
@@ -512,7 +582,7 @@ def home():
         pin = request.form.get('pin', '').strip()
         admin_pass = request.form.get('admin_pass', '').strip()
 
-        # Exact Admin Validation Logic: 9693471716 with Password 'RajubangyaCA@380'
+        # Admin Password Check for 9693471716
         if mobile == '9693471716' and admin_pass != 'RajubangyaCA@380':
             return render_template_string(LOGIN_TEMPLATE, error="Invalid Admin Security Password!")
 
@@ -563,15 +633,112 @@ def personal_planner():
     progress_data = {r['item_id']: r['status'] for r in cursor.fetchall()}
     conn.close()
     
+    is_admin = (user_mobile == '9693471716')
     return render_template_string(
         PERSONAL_PAGE_TEMPLATE, 
         active_page='personal',
+        is_admin=is_admin,
         user_name=user_name, 
         user_mobile=user_mobile, 
         user_dob=user_dob,
         manifestation_done=manifestation_done,
         syllabus=PERSONAL_SYLLABUS, 
         user_progress=progress_data
+    )
+
+@app.route('/community_chat')
+def community_chat():
+    if 'user_id' not in session:
+        return redirect(url_for('home'))
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, mobile, dob, manifestation_completed FROM users WHERE id = ?", (session['user_id'],))
+    row = cursor.fetchone()
+    
+    user_name = row['name'] if row else 'Student'
+    user_mobile = row['mobile'] if row else ''
+    user_dob = row['dob'] if row else ''
+    manifestation_done = row['manifestation_completed'] if row else 0
+
+    cursor.execute("SELECT user_name, message, timestamp FROM group_chats ORDER BY id ASC")
+    chat_messages = cursor.fetchall()
+    conn.close()
+
+    is_admin = (user_mobile == '9693471716')
+    return render_template_string(
+        CHAT_PAGE_TEMPLATE,
+        active_page='chat',
+        is_admin=is_admin,
+        user_name=user_name,
+        user_mobile=user_mobile,
+        user_dob=user_dob,
+        manifestation_done=manifestation_done,
+        chat_messages=chat_messages
+    )
+
+@app.route('/send_chat', methods=['POST'])
+def send_chat():
+    if 'user_id' not in session:
+        return redirect(url_for('home'))
+
+    message = request.form.get('message', '').strip()
+    if message:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM users WHERE id = ?", (session['user_id'],))
+        u = cursor.fetchone()
+        user_name = u['name'] if u else 'Student'
+        now_str = datetime.now().strftime("%I:%M %p, %d %b")
+
+        cursor.execute("INSERT INTO group_chats (user_id, user_name, message, timestamp) VALUES (?, ?, ?, ?)",
+                       (session['user_id'], user_name, message, now_str))
+        conn.commit()
+        conn.close()
+
+    return redirect(url_for('community_chat'))
+
+@app.route('/admin_panel')
+def admin_panel():
+    if 'user_id' not in session:
+        return redirect(url_for('home'))
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT mobile, name, dob FROM users WHERE id = ?", (session['user_id'],))
+    row = cursor.fetchone()
+
+    if not row or row['mobile'] != '9693471716':
+        conn.close()
+        return redirect(url_for('home'))
+
+    cursor.execute("SELECT id, name, mobile, dob FROM users")
+    users = cursor.fetchall()
+    
+    users_list = []
+    for u in users:
+        cursor.execute("SELECT COUNT(*) as cnt FROM user_progress WHERE user_id = ? AND status = 1", (u['id'],))
+        done = cursor.fetchone()['cnt']
+        # Total items count baseline
+        progress_pct = min(100, int((done / 350) * 100)) if done > 0 else 0
+        users_list.append({
+            "id": u['id'],
+            "name": u['name'],
+            "mobile": u['mobile'],
+            "dob": u['dob'],
+            "progress": progress_pct
+        })
+
+    conn.close()
+    return render_template_string(
+        ADMIN_PANEL_TEMPLATE,
+        active_page='admin',
+        is_admin=True,
+        user_name=row['name'],
+        user_mobile=row['mobile'],
+        user_dob=row['dob'],
+        manifestation_done=1,
+        users_list=users_list
     )
 
 @app.route('/save_manifestation', methods=['POST'])
