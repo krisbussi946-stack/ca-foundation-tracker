@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from flask import Flask, render_template_string, request, redirect, url_for, session, jsonify
 
 app = Flask(__name__)
-app.secret_key = 'ca_foundation_jan2027_master_chat_key'
+app.secret_key = 'ca_foundation_jan2027_master_chat_key_v3'
 app.permanent_session_lifetime = timedelta(days=60)
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'castudy.db')
@@ -24,7 +24,8 @@ def init_db():
             name TEXT NOT NULL,
             dob TEXT,
             pin TEXT NOT NULL,
-            manifestation_completed INTEGER DEFAULT 0
+            manifestation_completed INTEGER DEFAULT 0,
+            is_blocked INTEGER DEFAULT 0
         )
     ''')
     cursor.execute('''
@@ -40,7 +41,8 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
             user_name TEXT,
-            message TEXT NOT NULL,
+            message TEXT,
+            media_url TEXT,
             timestamp TEXT NOT NULL
         )
     ''')
@@ -51,6 +53,8 @@ def init_db():
         cursor.execute("ALTER TABLE users ADD COLUMN dob TEXT")
     if 'manifestation_completed' not in cols:
         cursor.execute("ALTER TABLE users ADD COLUMN manifestation_completed INTEGER DEFAULT 0")
+    if 'is_blocked' not in cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN is_blocked INTEGER DEFAULT 0")
 
     conn.commit()
     conn.close()
@@ -189,8 +193,9 @@ SHARED_LAYOUT_HEADER = '''
         .progress-bar-custom { background: linear-gradient(90deg, #3b82f6, #10b981); }
         .gold-input { color: #fbbf24 !important; font-weight: bold; background: #0f172a; border: 1px solid #f59e0b; }
         .manifestation-card { background: linear-gradient(135deg, #1e1b4b, #312e81); border: 2px solid #fbbf24; }
-        .chat-box { background: #1e293b; border: 1px solid #334155; border-radius: 12px; height: 350px; overflow-y: auto; padding: 15px; }
-        .chat-msg { background: #0f172a; border-left: 3px solid #38bdf8; padding: 8px 12px; border-radius: 6px; margin-bottom: 10px; }
+        .chat-box { background: #1e293b; border: 1px solid #334155; border-radius: 12px; height: 380px; overflow-y: auto; padding: 15px; }
+        .chat-msg { background: #0f172a; border-left: 3px solid #38bdf8; padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; }
+        .media-preview { max-width: 100%; max-height: 250px; border-radius: 8px; margin-top: 6px; }
     </style>
 </head>
 <body>
@@ -208,6 +213,11 @@ SHARED_LAYOUT_HEADER = '''
             </div>
 
             <div class="d-flex align-items-center gap-2 flex-wrap">
+                <!-- Telegram Channel Link -->
+                <a href="https://t.me/+T00sbNCe1eU3ZWQ1" target="_blank" class="btn btn-primary font-weight-bold shadow-sm">
+                    ✈️ Join Telegram
+                </a>
+                
                 {% if is_admin %}
                     <a href="{{ url_for('admin_panel') }}" class="btn btn-danger font-weight-bold shadow-sm">🛡️ Admin Panel</a>
                 {% endif %}
@@ -337,6 +347,36 @@ SHARED_LAYOUT_FOOTER = '''
                 });
             });
         });
+
+        // SELECT ALL / DESELECT ALL CHAPTER TOGGLE FUNCTION
+        function toggleGroupCheckboxes(groupId) {
+            const group = document.getElementById(groupId);
+            if (!group) return;
+            const checkboxes = group.querySelectorAll('.lec-checkbox');
+            if (checkboxes.length === 0) return;
+
+            let allChecked = true;
+            checkboxes.forEach(c => { if (!c.checked) allChecked = false; });
+
+            const newStatus = allChecked ? 0 : 1;
+            const bulkItems = [];
+
+            checkboxes.forEach(c => {
+                c.checked = !allChecked;
+                bulkItems.push({
+                    item_id: c.getAttribute('data-key'),
+                    status: newStatus
+                });
+            });
+
+            calculateOverallProgress();
+
+            fetch('/bulk_update_progress', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({items: bulkItems})
+            });
+        }
     </script>
 </body>
 </html>
@@ -351,10 +391,14 @@ ICAI_PAGE_TEMPLATE = SHARED_LAYOUT_HEADER + '''
         <div class="accordion" id="accordion-icai-{{ subject_idx }}">
             {% for chap in chapters %}
             {% set chap_idx = loop.index %}
-            <div class="accordion-item">
-                <h2 class="accordion-header">
-                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-icai-{{ subject_idx }}-{{ chap_idx }}">
+            {% set group_id = 'group-icai-' ~ subject_idx ~ '-' ~ chap_idx %}
+            <div class="accordion-item" id="{{ group_id }}">
+                <h2 class="accordion-header d-flex align-items-center justify-content-between pe-3">
+                    <button class="accordion-button collapsed flex-grow-1" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-icai-{{ subject_idx }}-{{ chap_idx }}">
                         {{ chap.chapter }}
+                    </button>
+                    <button class="btn btn-sm btn-outline-warning ms-2" type="button" onclick="toggleGroupCheckboxes('{{ group_id }}')">
+                        Select All ✅
                     </button>
                 </h2>
                 <div id="collapse-icai-{{ subject_idx }}-{{ chap_idx }}" class="accordion-collapse collapse">
@@ -390,10 +434,14 @@ PERSONAL_PAGE_TEMPLATE = SHARED_LAYOUT_HEADER + '''
         <div class="accordion" id="accordion-personal-{{ s_idx }}">
             {% for unit_data in units %}
             {% set u_idx = loop.index %}
-            <div class="accordion-item">
-                <h2 class="accordion-header">
-                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-p-{{ s_idx }}-{{ u_idx }}">
+            {% set group_id = 'group-p-' ~ s_idx ~ '-' ~ u_idx %}
+            <div class="accordion-item" id="{{ group_id }}">
+                <h2 class="accordion-header d-flex align-items-center justify-content-between pe-3">
+                    <button class="accordion-button collapsed flex-grow-1" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-p-{{ s_idx }}-{{ u_idx }}">
                         {{ unit_data.unit }}
+                    </button>
+                    <button class="btn btn-sm btn-outline-warning ms-2" type="button" onclick="toggleGroupCheckboxes('{{ group_id }}')">
+                        Select All ✅
                     </button>
                 </h2>
                 <div id="collapse-p-{{ s_idx }}-{{ u_idx }}" class="accordion-collapse collapse">
@@ -420,9 +468,9 @@ PERSONAL_PAGE_TEMPLATE = SHARED_LAYOUT_HEADER + '''
     {% endfor %}
 ''' + SHARED_LAYOUT_FOOTER
 
-# DYNAMIC COMMUNITY GROUP CHAT TEMPLATE (SAFE & PRIVATE)
+# COMMUNITY CHAT PAGE WITH MEDIA PREVIEW & PRIVACY
 CHAT_PAGE_TEMPLATE = SHARED_LAYOUT_HEADER + '''
-    <h4 class="text-warning mb-3">💬 Student Discussion Forum (Privacy Safe)</h4>
+    <h4 class="text-warning mb-3">💬 Student Discussion Forum (Media & Links Enabled)</h4>
     <div class="chat-box mb-3" id="chatWindow">
         {% for msg in chat_messages %}
         <div class="chat-msg">
@@ -430,14 +478,24 @@ CHAT_PAGE_TEMPLATE = SHARED_LAYOUT_HEADER + '''
                 <strong class="text-warning">👤 {{ msg.user_name }}</strong>
                 <small class="text-muted">{{ msg.timestamp }}</small>
             </div>
-            <p class="m-0 text-light mt-1">{{ msg.message }}</p>
+            {% if msg.message %}
+                <p class="m-0 text-light mt-1">{{ msg.message }}</p>
+            {% endif %}
+            {% if msg.media_url %}
+                {% if msg.media_url.endswith('.mp4') or msg.media_url.endswith('.webm') %}
+                    <video src="{{ msg.media_url }}" controls class="media-preview mt-2"></video>
+                {% else %}
+                    <img src="{{ msg.media_url }}" class="media-preview mt-2" alt="Chat Media">
+                {% endif %}
+            {% endif %}
         </div>
         {% endfor %}
     </div>
 
-    <form action="/send_chat" method="POST" class="d-flex gap-2">
-        <input type="text" name="message" class="form-control gold-input" placeholder="Type study question or motivation message..." required autocomplete="off">
-        <button type="submit" class="btn btn-warning font-weight-bold">Send 🚀</button>
+    <form action="/send_chat" method="POST" class="d-flex flex-column gap-2">
+        <input type="text" name="message" class="form-control gold-input" placeholder="Type message or paste link..." autocomplete="off">
+        <input type="text" name="media_url" class="form-control bg-dark text-light border-secondary" placeholder="Optional: Direct Image / Short Video Link URL (.jpg, .png, .mp4)">
+        <button type="submit" class="btn btn-warning font-weight-bold py-2">Send Message / Media 🚀</button>
     </form>
     <script>
         const chatWin = document.getElementById('chatWindow');
@@ -445,11 +503,11 @@ CHAT_PAGE_TEMPLATE = SHARED_LAYOUT_HEADER + '''
     </script>
 ''' + SHARED_LAYOUT_FOOTER
 
-# ADMIN PANEL TEMPLATE (RESTRICTED TO ADMIN ONLY)
+# ADMIN PANEL WITH USER BLOCK/UNBLOCK ACTION
 ADMIN_PANEL_TEMPLATE = SHARED_LAYOUT_HEADER + '''
     <h4 class="text-warning mb-3">🛡️ Admin Control Panel</h4>
     <div class="table-responsive bg-dark p-3 rounded border border-secondary">
-        <table class="table table-dark table-hover">
+        <table class="table table-dark table-hover align-middle">
             <thead>
                 <tr>
                     <th>ID</th>
@@ -457,6 +515,7 @@ ADMIN_PANEL_TEMPLATE = SHARED_LAYOUT_HEADER + '''
                     <th>Mobile Number</th>
                     <th>DOB</th>
                     <th>Progress (%)</th>
+                    <th>Status Action</th>
                 </tr>
             </thead>
             <tbody>
@@ -467,6 +526,13 @@ ADMIN_PANEL_TEMPLATE = SHARED_LAYOUT_HEADER + '''
                     <td>{{ u.mobile }}</td>
                     <td>{{ u.dob }}</td>
                     <td><span class="badge bg-success fs-6">{{ u.progress }}%</span></td>
+                    <td>
+                        {% if u.is_blocked %}
+                            <a href="/toggle_block/{{ u.id }}" class="btn btn-sm btn-outline-success">Unblock User</a>
+                        {% else %}
+                            <a href="/toggle_block/{{ u.id }}" class="btn btn-sm btn-outline-danger">Block User 🚫</a>
+                        {% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -550,9 +616,13 @@ def home():
     if 'user_id' in session:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute("SELECT name, mobile, dob, manifestation_completed FROM users WHERE id = ?", (session['user_id'],))
+        cursor.execute("SELECT name, mobile, dob, manifestation_completed, is_blocked FROM users WHERE id = ?", (session['user_id'],))
         row = cursor.fetchone()
         
+        if row and row['is_blocked'] == 1:
+            session.clear()
+            return render_template_string(LOGIN_TEMPLATE, error="Your account has been blocked by Admin!")
+
         user_name = row['name'] if row else 'Student'
         user_mobile = row['mobile'] if row else ''
         user_dob = row['dob'] if row else ''
@@ -582,16 +652,19 @@ def home():
         pin = request.form.get('pin', '').strip()
         admin_pass = request.form.get('admin_pass', '').strip()
 
-        # Admin Password Check for 9693471716
         if mobile == '9693471716' and admin_pass != 'RajubangyaCA@380':
             return render_template_string(LOGIN_TEMPLATE, error="Invalid Admin Security Password!")
 
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, pin FROM users WHERE mobile = ?", (mobile,))
+        cursor.execute("SELECT id, pin, is_blocked FROM users WHERE mobile = ?", (mobile,))
         user = cursor.fetchone()
 
         if user:
+            if user['is_blocked'] == 1:
+                conn.close()
+                return render_template_string(LOGIN_TEMPLATE, error="Your account has been blocked by Admin!")
+
             if str(user['pin']) == str(pin):
                 session.permanent = True
                 session['user_id'] = user['id']
@@ -653,15 +726,19 @@ def community_chat():
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT name, mobile, dob, manifestation_completed FROM users WHERE id = ?", (session['user_id'],))
+    cursor.execute("SELECT name, mobile, dob, manifestation_completed, is_blocked FROM users WHERE id = ?", (session['user_id'],))
     row = cursor.fetchone()
     
+    if row and row['is_blocked'] == 1:
+        session.clear()
+        return redirect(url_for('home'))
+
     user_name = row['name'] if row else 'Student'
     user_mobile = row['mobile'] if row else ''
     user_dob = row['dob'] if row else ''
     manifestation_done = row['manifestation_completed'] if row else 0
 
-    cursor.execute("SELECT user_name, message, timestamp FROM group_chats ORDER BY id ASC")
+    cursor.execute("SELECT user_name, message, media_url, timestamp FROM group_chats ORDER BY id ASC")
     chat_messages = cursor.fetchall()
     conn.close()
 
@@ -682,19 +759,27 @@ def send_chat():
     if 'user_id' not in session:
         return redirect(url_for('home'))
 
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, is_blocked FROM users WHERE id = ?", (session['user_id'],))
+    u = cursor.fetchone()
+
+    if u and u['is_blocked'] == 1:
+        conn.close()
+        session.clear()
+        return redirect(url_for('home'))
+
     message = request.form.get('message', '').strip()
-    if message:
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM users WHERE id = ?", (session['user_id'],))
-        u = cursor.fetchone()
+    media_url = request.form.get('media_url', '').strip()
+
+    if message or media_url:
         user_name = u['name'] if u else 'Student'
         now_str = datetime.now().strftime("%I:%M %p, %d %b")
 
-        cursor.execute("INSERT INTO group_chats (user_id, user_name, message, timestamp) VALUES (?, ?, ?, ?)",
-                       (session['user_id'], user_name, message, now_str))
+        cursor.execute("INSERT INTO group_chats (user_id, user_name, message, media_url, timestamp) VALUES (?, ?, ?, ?, ?)",
+                       (session['user_id'], user_name, message, media_url, now_str))
         conn.commit()
-        conn.close()
+    conn.close()
 
     return redirect(url_for('community_chat'))
 
@@ -712,20 +797,20 @@ def admin_panel():
         conn.close()
         return redirect(url_for('home'))
 
-    cursor.execute("SELECT id, name, mobile, dob FROM users")
+    cursor.execute("SELECT id, name, mobile, dob, is_blocked FROM users")
     users = cursor.fetchall()
     
     users_list = []
     for u in users:
         cursor.execute("SELECT COUNT(*) as cnt FROM user_progress WHERE user_id = ? AND status = 1", (u['id'],))
         done = cursor.fetchone()['cnt']
-        # Total items count baseline
         progress_pct = min(100, int((done / 350) * 100)) if done > 0 else 0
         users_list.append({
             "id": u['id'],
             "name": u['name'],
             "mobile": u['mobile'],
             "dob": u['dob'],
+            "is_blocked": u['is_blocked'],
             "progress": progress_pct
         })
 
@@ -740,6 +825,48 @@ def admin_panel():
         manifestation_done=1,
         users_list=users_list
     )
+
+@app.route('/toggle_block/<int:target_user_id>')
+def toggle_block(target_user_id):
+    if 'user_id' not in session:
+        return redirect(url_for('home'))
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT mobile FROM users WHERE id = ?", (session['user_id'],))
+    admin_row = cursor.fetchone()
+
+    if admin_row and admin_row['mobile'] == '9693471716':
+        cursor.execute("SELECT is_blocked FROM users WHERE id = ?", (target_user_id,))
+        usr = cursor.fetchone()
+        if usr:
+            new_status = 0 if usr['is_blocked'] == 1 else 1
+            cursor.execute("UPDATE users SET is_blocked = ? WHERE id = ?", (new_status, target_user_id))
+            conn.commit()
+
+    conn.close()
+    return redirect(url_for('admin_panel'))
+
+@app.route('/bulk_update_progress', methods=['POST'])
+def bulk_update_progress():
+    if 'user_id' not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.json
+    items = data.get('items', [])
+
+    conn = get_db()
+    cursor = conn.cursor()
+    for item in items:
+        cursor.execute('''
+            INSERT INTO user_progress (user_id, item_id, status)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id, item_id) DO UPDATE SET status=excluded.status
+        ''', (session['user_id'], item['item_id'], item['status']))
+    
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
 
 @app.route('/save_manifestation', methods=['POST'])
 def save_manifestation():
