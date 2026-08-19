@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from flask import Flask, render_template_string, request, redirect, url_for, session, jsonify
 
 app = Flask(__name__)
-app.secret_key = 'ca_foundation_jan2027_pro_master_key_v6'
+app.secret_key = 'ca_foundation_jan2027_pro_master_key_v7'
 app.permanent_session_lifetime = timedelta(days=60)
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'castudy.db')
@@ -193,6 +193,20 @@ SHARED_LAYOUT_HEADER = '''
         .chat-msg { background: #1f2937; border-left: 3px solid #38bdf8; padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; }
         .media-preview { max-width: 100%; max-height: 250px; border-radius: 8px; margin-top: 6px; }
         .pro-tip-box { background: linear-gradient(135deg, #1e1b4b, #312e81); border-left: 4px solid #f59e0b; padding: 15px; border-radius: 8px; }
+        .action-card {
+            background: linear-gradient(145deg, #1f2937, #111827);
+            border: 2px solid #3b82f6;
+            border-radius: 16px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .action-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(59, 130, 246, 0.4);
+            border-color: #fbbf24;
+        }
     </style>
 </head>
 <body>
@@ -387,94 +401,129 @@ ICAI_PAGE_TEMPLATE = SHARED_LAYOUT_HEADER + '''
     {% endfor %}
 ''' + SHARED_LAYOUT_FOOTER
 
-# PRO DUAL-COLUMN PERSONAL PLANNER & DAILY ROUTINE
+# DASHBOARD CARD SELECTION TEMPLATE
 PERSONAL_PAGE_TEMPLATE = SHARED_LAYOUT_HEADER + '''
-    <h4 class="text-warning mb-3">🎯 My Personal Lecture & Daily Routine Planner</h4>
+    <h4 class="text-warning mb-4">🎯 Personal Study Dashboard</h4>
     
-    <div class="row">
-        <!-- LEFT COLUMN: LECTURE-BY-LECTURE TRACKER -->
-        <div class="col-lg-7 mb-4">
-            <h5 class="text-info mb-3">📚 Chapter & Lecture Tracker</h5>
-            {% for subject, units in syllabus.items() %}
-            {% set s_idx = loop.index %}
-            <div class="subject-card p-3">
-                <h6 class="text-warning mb-3">📌 {{ subject }}</h6>
-                <div class="accordion" id="accordion-personal-{{ s_idx }}">
-                    {% for unit_data in units %}
-                    {% set u_idx = loop.index %}
-                    {% set group_id = 'group-p-' ~ s_idx ~ '-' ~ u_idx %}
-                    <div class="accordion-item" id="{{ group_id }}">
-                        <h2 class="accordion-header d-flex align-items-center justify-content-between pe-3">
-                            <button class="accordion-button collapsed flex-grow-1" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-p-{{ s_idx }}-{{ u_idx }}">
-                                {{ unit_data.unit }}
-                            </button>
-                            <button class="btn btn-sm btn-outline-warning ms-2" type="button" onclick="toggleGroupCheckboxes('{{ group_id }}')">
-                                Select All ✅
-                            </button>
-                        </h2>
-                        <div id="collapse-p-{{ s_idx }}-{{ u_idx }}" class="accordion-collapse collapse">
-                            <div class="accordion-body">
-                                <div class="row">
-                                    {% for lec in unit_data.lectures %}
-                                    {% set lec_key = subject ~ '_' ~ unit_data.unit ~ '_' ~ lec %}
-                                    <div class="col-md-6 mb-2">
-                                        <div class="form-check">
-                                            <input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ lec_key }}" id="chk-p-{{ s_idx }}-{{ u_idx }}-{{ loop.index }}" {% if user_progress.get(lec_key) == 1 %}checked{% endif %}>
-                                            <label class="form-check-label text-light" for="chk-p-{{ s_idx }}-{{ u_idx }}-{{ loop.index }}">
-                                                {{ lec }}
-                                            </label>
-                                        </div>
-                                    </div>
-                                    {% endfor %}
+    <div class="row g-4 my-2">
+        <div class="col-md-6">
+            <a href="/view_lectures" class="text-decoration-none text-light">
+                <div class="action-card h-100 d-flex flex-column justify-content-center align-items-center p-5">
+                    <div style="font-size: 3.5rem;" class="mb-3">📚</div>
+                    <h3 class="text-warning font-weight-bold mb-2">Chapter & Lecture Planner</h3>
+                    <p class="text-muted">Full Page View: Track subject-wise FastTrack, concept lectures & written practice sessions.</p>
+                    <span class="btn btn-warning mt-2 fw-bold">Open Full Screen Planner ➔</span>
+                </div>
+            </a>
+        </div>
+
+        <div class="col-md-6">
+            <a href="/view_routine" class="text-decoration-none text-light">
+                <div class="action-card h-100 d-flex flex-column justify-content-center align-items-center p-5">
+                    <div style="font-size: 3.5rem;" class="mb-3">✍️</div>
+                    <h3 class="text-info font-weight-bold mb-2">Daily Practice & Routine Tracker</h3>
+                    <p class="text-muted">Full Page View: Daily lecture watch status, DPP homework practice & study pro-tips.</p>
+                    <span class="btn btn-info mt-2 fw-bold">Open Routine Tracker ➔</span>
+                </div>
+            </a>
+        </div>
+    </div>
+''' + SHARED_LAYOUT_FOOTER
+
+# FULL SCREEN LECTURES VIEW TEMPLATE
+FULL_LECTURES_TEMPLATE = SHARED_LAYOUT_HEADER + '''
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="text-warning m-0">📚 Chapter & Lecture Planner (Full Page)</h4>
+        <a href="/personal_planner" class="btn btn-outline-warning btn-sm">⬅️ Back to Personal Dashboard</a>
+    </div>
+
+    {% for subject, units in syllabus.items() %}
+    {% set s_idx = loop.index %}
+    <div class="subject-card p-4">
+        <h5 class="text-warning mb-3">📌 {{ subject }}</h5>
+        <div class="accordion" id="accordion-personal-{{ s_idx }}">
+            {% for unit_data in units %}
+            {% set u_idx = loop.index %}
+            {% set group_id = 'group-p-' ~ s_idx ~ '-' ~ u_idx %}
+            <div class="accordion-item" id="{{ group_id }}">
+                <h2 class="accordion-header d-flex align-items-center justify-content-between pe-3">
+                    <button class="accordion-button collapsed flex-grow-1" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-p-{{ s_idx }}-{{ u_idx }}">
+                        {{ unit_data.unit }}
+                    </button>
+                    <button class="btn btn-sm btn-outline-warning ms-2" type="button" onclick="toggleGroupCheckboxes('{{ group_id }}')">
+                        Select All ✅
+                    </button>
+                </h2>
+                <div id="collapse-p-{{ s_idx }}-{{ u_idx }}" class="accordion-collapse collapse">
+                    <div class="accordion-body">
+                        <div class="row">
+                            {% for lec in unit_data.lectures %}
+                            {% set lec_key = subject ~ '_' ~ unit_data.unit ~ '_' ~ lec %}
+                            <div class="col-md-4 col-sm-6 mb-2">
+                                <div class="form-check">
+                                    <input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ lec_key }}" id="chk-p-{{ s_idx }}-{{ u_idx }}-{{ loop.index }}" {% if user_progress.get(lec_key) == 1 %}checked{% endif %}>
+                                    <label class="form-check-label text-light" for="chk-p-{{ s_idx }}-{{ u_idx }}-{{ loop.index }}">
+                                        {{ lec }}
+                                    </label>
                                 </div>
                             </div>
+                            {% endfor %}
                         </div>
                     </div>
-                    {% endfor %}
                 </div>
             </div>
             {% endfor %}
         </div>
+    </div>
+    {% endfor %}
+''' + SHARED_LAYOUT_FOOTER
 
-        <!-- RIGHT COLUMN: DAILY WATCH, HOMEWORK & PRO TIPS TRACKER -->
-        <div class="col-lg-5 mb-4">
-            <h5 class="text-success mb-3">✍️ Daily Practice & Routine Tracker</h5>
-            
-            <div class="subject-card p-3 mb-3">
-                <h6 class="text-warning">📺 Daily Lecture Watch Status</h6>
+# FULL SCREEN ROUTINE VIEW TEMPLATE
+FULL_ROUTINE_TEMPLATE = SHARED_LAYOUT_HEADER + '''
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="text-info m-0">✍️ Daily Practice & Routine Tracker (Full Page)</h4>
+        <a href="/personal_planner" class="btn btn-outline-warning btn-sm">⬅️ Back to Personal Dashboard</a>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6 mb-4">
+            <div class="subject-card p-4 h-100">
+                <h5 class="text-warning mb-3">📺 Daily Lecture Watch Status</h5>
                 <p class="text-muted small">Tick daily when target videos are completed:</p>
                 {% for subject in ['Accounting', 'Business Law', 'Quantitative Aptitude', 'Business Economics'] %}
                 {% set watch_key = 'daily_watch_' ~ subject %}
-                <div class="form-check mb-2">
+                <div class="form-check mb-3">
                     <input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ watch_key }}" id="watch-{{ loop.index }}" {% if user_progress.get(watch_key) == 1 %}checked{% endif %}>
-                    <label class="form-check-label text-light" for="watch-{{ loop.index }}">
+                    <label class="form-check-label text-light fs-6" for="watch-{{ loop.index }}">
                         Watched Today's {{ subject }} Lecture
                     </label>
                 </div>
                 {% endfor %}
             </div>
+        </div>
 
-            <div class="subject-card p-3 mb-3">
-                <h6 class="text-info">📝 Homework & DPP Practice Tracker</h6>
+        <div class="col-md-6 mb-4">
+            <div class="subject-card p-4 h-100">
+                <h5 class="text-info mb-3">📝 Homework & DPP Practice Tracker</h5>
                 <p class="text-muted small">Tick when homework/questions are completed:</p>
                 {% for subject in ['Accounting', 'Business Law', 'Quantitative Aptitude', 'Business Economics'] %}
                 {% set hw_key = 'daily_hw_' ~ subject %}
-                <div class="form-check mb-2">
+                <div class="form-check mb-3">
                     <input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ hw_key }}" id="hw-{{ loop.index }}" {% if user_progress.get(hw_key) == 1 %}checked{% endif %}>
-                    <label class="form-check-label text-light" for="hw-{{ loop.index }}">
+                    <label class="form-check-label text-light fs-6" for="hw-{{ loop.index }}">
                         Completed {{ subject }} Homework (HW / DPP)
                     </label>
                 </div>
                 {% endfor %}
             </div>
-
-            <div class="pro-tip-box shadow">
-                <h6 class="text-warning mb-2">🔥 CA Foundation Pro Tip</h6>
-                <p class="m-0 text-light" style="font-size: 0.9rem;">
-                    "Consistency > Intensity! Law me written practice daily karo aur Quants me concepts samajhne ke baad minimum 30 questions solve karo. You got this Krishna bhai!" 💪
-                </p>
-            </div>
         </div>
+    </div>
+
+    <div class="pro-tip-box shadow p-4 mt-2 mb-4">
+        <h5 class="text-warning mb-2">🔥 CA Foundation Pro Strategy Tip</h5>
+        <p class="m-0 text-light fs-6">
+            "Consistency > Intensity! Law me written practice daily karo aur Quants me concepts samajhne ke baad minimum 30 questions solve karo. You got this Krishna bhai!" 💪
+        </p>
     </div>
 ''' + SHARED_LAYOUT_FOOTER
 
@@ -719,7 +768,65 @@ def personal_planner():
         user_name=user_name, 
         user_mobile=user_mobile, 
         user_dob=user_dob,
+        user_progress=progress_data
+    )
+
+@app.route('/view_lectures')
+def view_lectures():
+    if 'user_id' not in session:
+        return redirect(url_for('home'))
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, mobile, dob FROM users WHERE id = ?", (session['user_id'],))
+    row = cursor.fetchone()
+    
+    user_name = row['name'] if row else 'Student'
+    user_mobile = row['mobile'] if row else ''
+    user_dob = row['dob'] if row else ''
+
+    cursor.execute("SELECT item_id, status FROM user_progress WHERE user_id = ?", (session['user_id'],))
+    progress_data = {r['item_id']: r['status'] for r in cursor.fetchall()}
+    conn.close()
+    
+    is_admin = (user_mobile == '9693471716')
+    return render_template_string(
+        FULL_LECTURES_TEMPLATE, 
+        active_page='personal',
+        is_admin=is_admin,
+        user_name=user_name, 
+        user_mobile=user_mobile, 
+        user_dob=user_dob,
         syllabus=PERSONAL_SYLLABUS, 
+        user_progress=progress_data
+    )
+
+@app.route('/view_routine')
+def view_routine():
+    if 'user_id' not in session:
+        return redirect(url_for('home'))
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, mobile, dob FROM users WHERE id = ?", (session['user_id'],))
+    row = cursor.fetchone()
+    
+    user_name = row['name'] if row else 'Student'
+    user_mobile = row['mobile'] if row else ''
+    user_dob = row['dob'] if row else ''
+
+    cursor.execute("SELECT item_id, status FROM user_progress WHERE user_id = ?", (session['user_id'],))
+    progress_data = {r['item_id']: r['status'] for r in cursor.fetchall()}
+    conn.close()
+    
+    is_admin = (user_mobile == '9693471716')
+    return render_template_string(
+        FULL_ROUTINE_TEMPLATE, 
+        active_page='personal',
+        is_admin=is_admin,
+        user_name=user_name, 
+        user_mobile=user_mobile, 
+        user_dob=user_dob,
         user_progress=progress_data
     )
 
