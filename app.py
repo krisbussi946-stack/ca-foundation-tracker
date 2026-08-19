@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from flask import Flask, render_template_string, request, redirect, url_for, session, jsonify
 
 app = Flask(__name__)
-app.secret_key = 'ca_foundation_jan2027_pro_master_key_v7'
+app.secret_key = 'ca_foundation_jan2027_pro_master_key_v8'
 app.permanent_session_lifetime = timedelta(days=60)
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'castudy.db')
@@ -207,6 +207,8 @@ SHARED_LAYOUT_HEADER = '''
             box-shadow: 0 10px 25px rgba(59, 130, 246, 0.4);
             border-color: #fbbf24;
         }
+        .table-custom th { background-color: #1f2937; color: #fbbf24; text-align: center; vertical-align: middle; font-size: 0.8rem; }
+        .table-custom td { background-color: #111827; color: #ffffff; text-align: center; vertical-align: middle; font-size: 0.85rem; }
     </style>
 </head>
 <body>
@@ -401,7 +403,6 @@ ICAI_PAGE_TEMPLATE = SHARED_LAYOUT_HEADER + '''
     {% endfor %}
 ''' + SHARED_LAYOUT_FOOTER
 
-# DASHBOARD CARD SELECTION TEMPLATE
 PERSONAL_PAGE_TEMPLATE = SHARED_LAYOUT_HEADER + '''
     <h4 class="text-warning mb-4">🎯 Personal Study Dashboard</h4>
     
@@ -421,16 +422,15 @@ PERSONAL_PAGE_TEMPLATE = SHARED_LAYOUT_HEADER + '''
             <a href="/view_routine" class="text-decoration-none text-light">
                 <div class="action-card h-100 d-flex flex-column justify-content-center align-items-center p-5">
                     <div style="font-size: 3.5rem;" class="mb-3">✍️</div>
-                    <h3 class="text-info font-weight-bold mb-2">Daily Practice & Routine Tracker</h3>
-                    <p class="text-muted">Full Page View: Daily lecture watch status, DPP homework practice & study pro-tips.</p>
-                    <span class="btn btn-info mt-2 fw-bold">Open Routine Tracker ➔</span>
+                    <h3 class="text-info font-weight-bold mb-2">134-Day Daily Target Tracker</h3>
+                    <p class="text-muted">Full Page Table View: Day 1 to Day 134 daily lectures, HW, Case Laws & Revision tracker.</p>
+                    <span class="btn btn-info mt-2 fw-bold">Open 134-Day Routine Tracker ➔</span>
                 </div>
             </a>
         </div>
     </div>
 ''' + SHARED_LAYOUT_FOOTER
 
-# FULL SCREEN LECTURES VIEW TEMPLATE
 FULL_LECTURES_TEMPLATE = SHARED_LAYOUT_HEADER + '''
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h4 class="text-warning m-0">📚 Chapter & Lecture Planner (Full Page)</h4>
@@ -478,51 +478,78 @@ FULL_LECTURES_TEMPLATE = SHARED_LAYOUT_HEADER + '''
     {% endfor %}
 ''' + SHARED_LAYOUT_FOOTER
 
-# FULL SCREEN ROUTINE VIEW TEMPLATE
+# EXACT DAY 1 TO DAY 134 FULL MATRIX TABLE ROUTINE
 FULL_ROUTINE_TEMPLATE = SHARED_LAYOUT_HEADER + '''
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4 class="text-info m-0">✍️ Daily Practice & Routine Tracker (Full Page)</h4>
+        <h4 class="text-info m-0">✍️ Day 1 to Day 134 Target Routine Planner</h4>
         <a href="/personal_planner" class="btn btn-outline-warning btn-sm">⬅️ Back to Personal Dashboard</a>
     </div>
 
-    <div class="row">
-        <div class="col-md-6 mb-4">
-            <div class="subject-card p-4 h-100">
-                <h5 class="text-warning mb-3">📺 Daily Lecture Watch Status</h5>
-                <p class="text-muted small">Tick daily when target videos are completed:</p>
-                {% for subject in ['Accounting', 'Business Law', 'Quantitative Aptitude', 'Business Economics'] %}
-                {% set watch_key = 'daily_watch_' ~ subject %}
-                <div class="form-check mb-3">
-                    <input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ watch_key }}" id="watch-{{ loop.index }}" {% if user_progress.get(watch_key) == 1 %}checked{% endif %}>
-                    <label class="form-check-label text-light fs-6" for="watch-{{ loop.index }}">
-                        Watched Today's {{ subject }} Lecture
-                    </label>
-                </div>
+    <div class="table-responsive subject-card p-3">
+        <table class="table table-dark table-bordered table-custom">
+            <thead>
+                <tr>
+                    <th style="min-width: 90px;">Day</th>
+                    <th>1. Accounts Lec</th>
+                    <th>2. Law Lec</th>
+                    <th>3. Quants Lec</th>
+                    <th>4. Eco Lec</th>
+                    <th>5. Accounts HW</th>
+                    <th>6. Law HW</th>
+                    <th>7. Quants HW</th>
+                    <th>8. Eco HW</th>
+                    <th>9. 2 Case Laws</th>
+                    <th>10. 10m LR Practice</th>
+                    <th>11. 30m Law Rev</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for day in range(1, 135) %}
+                <tr>
+                    <td class="fw-bold text-warning">Day {{ day }}</td>
+                    
+                    {% set k1 = 'day_' ~ day ~ '_accounts_lec' %}
+                    <td><input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ k1 }}" {% if user_progress.get(k1) == 1 %}checked{% endif %}></td>
+                    
+                    {% set k2 = 'day_' ~ day ~ '_law_lec' %}
+                    <td><input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ k2 }}" {% if user_progress.get(k2) == 1 %}checked{% endif %}></td>
+                    
+                    {% set k3 = 'day_' ~ day ~ '_quants_lec' %}
+                    <td><input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ k3 }}" {% if user_progress.get(k3) == 1 %}checked{% endif %}></td>
+                    
+                    {% set k4 = 'day_' ~ day ~ '_eco_lec' %}
+                    <td><input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ k4 }}" {% if user_progress.get(k4) == 1 %}checked{% endif %}></td>
+                    
+                    {% set k5 = 'day_' ~ day ~ '_accounts_hw' %}
+                    <td><input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ k5 }}" {% if user_progress.get(k5) == 1 %}checked{% endif %}></td>
+                    
+                    {% set k6 = 'day_' ~ day ~ '_law_hw' %}
+                    <td><input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ k6 }}" {% if user_progress.get(k6) == 1 %}checked{% endif %}></td>
+                    
+                    {% set k7 = 'day_' ~ day ~ '_quants_hw' %}
+                    <td><input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ k7 }}" {% if user_progress.get(k7) == 1 %}checked{% endif %}></td>
+                    
+                    {% set k8 = 'day_' ~ day ~ '_eco_hw' %}
+                    <td><input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ k8 }}" {% if user_progress.get(k8) == 1 %}checked{% endif %}></td>
+                    
+                    {% set k9 = 'day_' ~ day ~ '_caselaws' %}
+                    <td><input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ k9 }}" {% if user_progress.get(k9) == 1 %}checked{% endif %}></td>
+                    
+                    {% set k10 = 'day_' ~ day ~ '_lr_practice' %}
+                    <td><input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ k10 }}" {% if user_progress.get(k10) == 1 %}checked{% endif %}></td>
+                    
+                    {% set k11 = 'day_' ~ day ~ '_law_revision' %}
+                    <td><input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ k11 }}" {% if user_progress.get(k11) == 1 %}checked{% endif %}></td>
+                </tr>
                 {% endfor %}
-            </div>
-        </div>
-
-        <div class="col-md-6 mb-4">
-            <div class="subject-card p-4 h-100">
-                <h5 class="text-info mb-3">📝 Homework & DPP Practice Tracker</h5>
-                <p class="text-muted small">Tick when homework/questions are completed:</p>
-                {% for subject in ['Accounting', 'Business Law', 'Quantitative Aptitude', 'Business Economics'] %}
-                {% set hw_key = 'daily_hw_' ~ subject %}
-                <div class="form-check mb-3">
-                    <input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ hw_key }}" id="hw-{{ loop.index }}" {% if user_progress.get(hw_key) == 1 %}checked{% endif %}>
-                    <label class="form-check-label text-light fs-6" for="hw-{{ loop.index }}">
-                        Completed {{ subject }} Homework (HW / DPP)
-                    </label>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
+            </tbody>
+        </table>
     </div>
 
-    <div class="pro-tip-box shadow p-4 mt-2 mb-4">
-        <h5 class="text-warning mb-2">🔥 CA Foundation Pro Strategy Tip</h5>
+    <div class="pro-tip-box shadow p-4 mt-3 mb-4">
+        <h5 class="text-warning mb-2">🔥 Daily Execution Strategy</h5>
         <p class="m-0 text-light fs-6">
-            "Consistency > Intensity! Law me written practice daily karo aur Quants me concepts samajhne ke baad minimum 30 questions solve karo. You got this Krishna bhai!" 💪
+            "Har din ke 11 targets tick karke poora Day Complete karo. Consistency hi CA Foundation pass karwayegi! Krishna bhai, target clear hai!" 💪
         </p>
     </div>
 ''' + SHARED_LAYOUT_FOOTER
