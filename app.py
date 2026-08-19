@@ -1,17 +1,26 @@
 import os
-import sqlite3
+import urllib.parse as urlparse
 from datetime import datetime, timedelta
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from flask import Flask, render_template_string, request, redirect, url_for, session, jsonify
 
 app = Flask(__name__)
-app.secret_key = 'ca_foundation_jan2027_pro_master_key_v8'
+app.secret_key = 'ca_foundation_jan2027_pro_master_key_v9'
 app.permanent_session_lifetime = timedelta(days=60)
 
-DB_PATH = os.path.join(os.path.dirname(__file__), 'castudy.db')
+# Cloud PostgreSQL Connection URL from Render Environment Variable
+DATABASE_URL = os.environ.get('DATABASE_URL')
 
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    if DATABASE_URL:
+        # Neon PostgreSQL Database Connection
+        conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+    else:
+        # Fallback local connection if URL missing
+        conn = psycopg2.connect(
+            "postgresql://neondb_owner:npg_q9LY6igBNtGv@ep-raspy-lake-aw7xvwza.c-12.us-east-1.aws.neon.tech/neondb?sslmode=require"
+        )
     return conn
 
 def init_db():
@@ -19,11 +28,11 @@ def init_db():
     cursor = conn.cursor()
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            mobile TEXT UNIQUE NOT NULL,
-            name TEXT NOT NULL,
-            dob TEXT,
-            pin TEXT NOT NULL,
+            id SERIAL PRIMARY KEY,
+            mobile VARCHAR(20) UNIQUE NOT NULL,
+            name VARCHAR(100) NOT NULL,
+            dob VARCHAR(50),
+            pin VARCHAR(10) NOT NULL,
             is_blocked INTEGER DEFAULT 0
         )
     ''')
@@ -37,23 +46,16 @@ def init_db():
     ''')
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS group_chats (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             user_id INTEGER,
-            user_name TEXT,
+            user_name VARCHAR(100),
             message TEXT,
             media_url TEXT,
-            timestamp TEXT NOT NULL
+            timestamp VARCHAR(50) NOT NULL
         )
     ''')
-    
-    cursor.execute("PRAGMA table_info(users)")
-    cols = [c[1] for c in cursor.fetchall()]
-    if 'dob' not in cols:
-        cursor.execute("ALTER TABLE users ADD COLUMN dob TEXT")
-    if 'is_blocked' not in cols:
-        cursor.execute("ALTER TABLE users ADD COLUMN is_blocked INTEGER DEFAULT 0")
-
     conn.commit()
+    cursor.close()
     conn.close()
 
 init_db()
@@ -478,7 +480,6 @@ FULL_LECTURES_TEMPLATE = SHARED_LAYOUT_HEADER + '''
     {% endfor %}
 ''' + SHARED_LAYOUT_FOOTER
 
-# EXACT DAY 1 TO DAY 134 FULL MATRIX TABLE ROUTINE
 FULL_ROUTINE_TEMPLATE = SHARED_LAYOUT_HEADER + '''
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h4 class="text-info m-0">✍️ Day 1 to Day 134 Target Routine Planner</h4>
@@ -699,20 +700,23 @@ LOGIN_TEMPLATE = '''
 def home():
     if 'user_id' in session:
         conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("SELECT name, mobile, dob, is_blocked FROM users WHERE id = ?", (session['user_id'],))
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute("SELECT name, mobile, dob, is_blocked FROM users WHERE id = %s", (session['user_id'],))
         row = cursor.fetchone()
         
         if row and row['is_blocked'] == 1:
             session.clear()
+            cursor.close()
+            conn.close()
             return render_template_string(LOGIN_TEMPLATE, error="Your account has been blocked by Admin!")
 
         user_name = row['name'] if row else 'Student'
         user_mobile = row['mobile'] if row else ''
         user_dob = row['dob'] if row else ''
 
-        cursor.execute("SELECT item_id, status FROM user_progress WHERE user_id = ?", (session['user_id'],))
+        cursor.execute("SELECT item_id, status FROM user_progress WHERE user_id = %s", (session['user_id'],))
         progress_data = {r['item_id']: r['status'] for r in cursor.fetchall()}
+        cursor.close()
         conn.close()
         
         is_admin = (user_mobile == '9693471716')
@@ -738,32 +742,37 @@ def home():
             return render_template_string(LOGIN_TEMPLATE, error="Invalid Admin Security Password!")
 
         conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, pin, is_blocked FROM users WHERE mobile = ?", (mobile,))
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute("SELECT id, pin, is_blocked FROM users WHERE mobile = %s", (mobile,))
         user = cursor.fetchone()
 
         if user:
             if user['is_blocked'] == 1:
+                cursor.close()
                 conn.close()
                 return render_template_string(LOGIN_TEMPLATE, error="Your account has been blocked by Admin!")
 
             if str(user['pin']) == str(pin):
                 session.permanent = True
                 session['user_id'] = user['id']
+                cursor.close()
                 conn.close()
                 return redirect(url_for('home'))
             else:
+                cursor.close()
                 conn.close()
                 return render_template_string(LOGIN_TEMPLATE, error="Invalid PIN! Please check and try again.")
         else:
             if not name:
+                cursor.close()
                 conn.close()
                 return render_template_string(LOGIN_TEMPLATE, error="Please enter your Name to register new account!")
-            cursor.execute("INSERT INTO users (mobile, name, dob, pin) VALUES (?, ?, ?, ?)", (mobile, name, dob, pin))
+            cursor.execute("INSERT INTO users (mobile, name, dob, pin) VALUES (%s, %s, %s, %s) RETURNING id", (mobile, name, dob, pin))
+            user_id = cursor.fetchone()['id']
             conn.commit()
-            user_id = cursor.lastrowid
             session.permanent = True
             session['user_id'] = user_id
+            cursor.close()
             conn.close()
             return redirect(url_for('home'))
 
@@ -775,16 +784,17 @@ def personal_planner():
         return redirect(url_for('home'))
 
     conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT name, mobile, dob FROM users WHERE id = ?", (session['user_id'],))
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT name, mobile, dob FROM users WHERE id = %s", (session['user_id'],))
     row = cursor.fetchone()
     
     user_name = row['name'] if row else 'Student'
     user_mobile = row['mobile'] if row else ''
     user_dob = row['dob'] if row else ''
 
-    cursor.execute("SELECT item_id, status FROM user_progress WHERE user_id = ?", (session['user_id'],))
+    cursor.execute("SELECT item_id, status FROM user_progress WHERE user_id = %s", (session['user_id'],))
     progress_data = {r['item_id']: r['status'] for r in cursor.fetchall()}
+    cursor.close()
     conn.close()
     
     is_admin = (user_mobile == '9693471716')
@@ -804,16 +814,17 @@ def view_lectures():
         return redirect(url_for('home'))
 
     conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT name, mobile, dob FROM users WHERE id = ?", (session['user_id'],))
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT name, mobile, dob FROM users WHERE id = %s", (session['user_id'],))
     row = cursor.fetchone()
     
     user_name = row['name'] if row else 'Student'
     user_mobile = row['mobile'] if row else ''
     user_dob = row['dob'] if row else ''
 
-    cursor.execute("SELECT item_id, status FROM user_progress WHERE user_id = ?", (session['user_id'],))
+    cursor.execute("SELECT item_id, status FROM user_progress WHERE user_id = %s", (session['user_id'],))
     progress_data = {r['item_id']: r['status'] for r in cursor.fetchall()}
+    cursor.close()
     conn.close()
     
     is_admin = (user_mobile == '9693471716')
@@ -834,16 +845,17 @@ def view_routine():
         return redirect(url_for('home'))
 
     conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT name, mobile, dob FROM users WHERE id = ?", (session['user_id'],))
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT name, mobile, dob FROM users WHERE id = %s", (session['user_id'],))
     row = cursor.fetchone()
     
     user_name = row['name'] if row else 'Student'
     user_mobile = row['mobile'] if row else ''
     user_dob = row['dob'] if row else ''
 
-    cursor.execute("SELECT item_id, status FROM user_progress WHERE user_id = ?", (session['user_id'],))
+    cursor.execute("SELECT item_id, status FROM user_progress WHERE user_id = %s", (session['user_id'],))
     progress_data = {r['item_id']: r['status'] for r in cursor.fetchall()}
+    cursor.close()
     conn.close()
     
     is_admin = (user_mobile == '9693471716')
@@ -863,12 +875,14 @@ def community_chat():
         return redirect(url_for('home'))
 
     conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT name, mobile, dob, is_blocked FROM users WHERE id = ?", (session['user_id'],))
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT name, mobile, dob, is_blocked FROM users WHERE id = %s", (session['user_id'],))
     row = cursor.fetchone()
     
     if row and row['is_blocked'] == 1:
         session.clear()
+        cursor.close()
+        conn.close()
         return redirect(url_for('home'))
 
     user_name = row['name'] if row else 'Student'
@@ -877,6 +891,7 @@ def community_chat():
 
     cursor.execute("SELECT user_name, message, media_url, timestamp FROM group_chats ORDER BY id ASC")
     chat_messages = cursor.fetchall()
+    cursor.close()
     conn.close()
 
     is_admin = (user_mobile == '9693471716')
@@ -896,11 +911,12 @@ def send_chat():
         return redirect(url_for('home'))
 
     conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT name, is_blocked FROM users WHERE id = ?", (session['user_id'],))
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT name, is_blocked FROM users WHERE id = %s", (session['user_id'],))
     u = cursor.fetchone()
 
     if u and u['is_blocked'] == 1:
+        cursor.close()
         conn.close()
         session.clear()
         return redirect(url_for('home'))
@@ -912,9 +928,10 @@ def send_chat():
         user_name = u['name'] if u else 'Student'
         now_str = datetime.now().strftime("%I:%M %p, %d %b")
 
-        cursor.execute("INSERT INTO group_chats (user_id, user_name, message, media_url, timestamp) VALUES (?, ?, ?, ?, ?)",
+        cursor.execute("INSERT INTO group_chats (user_id, user_name, message, media_url, timestamp) VALUES (%s, %s, %s, %s, %s)",
                        (session['user_id'], user_name, message, media_url, now_str))
         conn.commit()
+    cursor.close()
     conn.close()
 
     return redirect(url_for('community_chat'))
@@ -925,11 +942,12 @@ def admin_panel():
         return redirect(url_for('home'))
 
     conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT mobile, name, dob FROM users WHERE id = ?", (session['user_id'],))
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT mobile, name, dob FROM users WHERE id = %s", (session['user_id'],))
     row = cursor.fetchone()
 
     if not row or row['mobile'] != '9693471716':
+        cursor.close()
         conn.close()
         return redirect(url_for('home'))
 
@@ -938,7 +956,7 @@ def admin_panel():
     
     users_list = []
     for u in users:
-        cursor.execute("SELECT COUNT(*) as cnt FROM user_progress WHERE user_id = ? AND status = 1", (u['id'],))
+        cursor.execute("SELECT COUNT(*) as cnt FROM user_progress WHERE user_id = %s AND status = 1", (u['id'],))
         done = cursor.fetchone()['cnt']
         progress_pct = min(100, int((done / 350) * 100)) if done > 0 else 0
         users_list.append({
@@ -950,6 +968,7 @@ def admin_panel():
             "progress": progress_pct
         })
 
+    cursor.close()
     conn.close()
     return render_template_string(
         ADMIN_PANEL_TEMPLATE,
@@ -967,18 +986,19 @@ def toggle_block(target_user_id):
         return redirect(url_for('home'))
 
     conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT mobile FROM users WHERE id = ?", (session['user_id'],))
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT mobile FROM users WHERE id = %s", (session['user_id'],))
     admin_row = cursor.fetchone()
 
     if admin_row and admin_row['mobile'] == '9693471716':
-        cursor.execute("SELECT is_blocked FROM users WHERE id = ?", (target_user_id,))
+        cursor.execute("SELECT is_blocked FROM users WHERE id = %s", (target_user_id,))
         usr = cursor.fetchone()
         if usr:
             new_status = 0 if usr['is_blocked'] == 1 else 1
-            cursor.execute("UPDATE users SET is_blocked = ? WHERE id = ?", (new_status, target_user_id))
+            cursor.execute("UPDATE users SET is_blocked = %s WHERE id = %s", (new_status, target_user_id))
             conn.commit()
 
+    cursor.close()
     conn.close()
     return redirect(url_for('admin_panel'))
 
@@ -995,11 +1015,12 @@ def bulk_update_progress():
     for item in items:
         cursor.execute('''
             INSERT INTO user_progress (user_id, item_id, status)
-            VALUES (?, ?, ?)
-            ON CONFLICT(user_id, item_id) DO UPDATE SET status=excluded.status
+            VALUES (%s, %s, %s)
+            ON CONFLICT(user_id, item_id) DO UPDATE SET status=EXCLUDED.status
         ''', (session['user_id'], item['item_id'], item['status']))
     
     conn.commit()
+    cursor.close()
     conn.close()
     return jsonify({"success": True})
 
@@ -1016,10 +1037,11 @@ def update_progress():
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO user_progress (user_id, item_id, status)
-        VALUES (?, ?, ?)
-        ON CONFLICT(user_id, item_id) DO UPDATE SET status=excluded.status
+        VALUES (%s, %s, %s)
+        ON CONFLICT(user_id, item_id) DO UPDATE SET status=EXCLUDED.status
     ''', (session['user_id'], item_id, status))
     conn.commit()
+    cursor.close()
     conn.close()
     return jsonify({"success": True})
 
