@@ -6,18 +6,15 @@ from psycopg2.extras import RealDictCursor
 from flask import Flask, render_template_string, request, redirect, url_for, session, jsonify
 
 app = Flask(__name__)
-app.secret_key = 'ca_foundation_jan2027_pro_master_key_v9'
+app.secret_key = 'ca_foundation_jan2027_pro_master_key_v10'
 app.permanent_session_lifetime = timedelta(days=60)
 
-# Cloud PostgreSQL Connection URL from Render Environment Variable
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
 def get_db():
     if DATABASE_URL:
-        # Neon PostgreSQL Database Connection
         conn = psycopg2.connect(DATABASE_URL, sslmode='require')
     else:
-        # Fallback local connection if URL missing
         conn = psycopg2.connect(
             "postgresql://neondb_owner:npg_q9LY6igBNtGv@ep-raspy-lake-aw7xvwza.c-12.us-east-1.aws.neon.tech/neondb?sslmode=require"
         )
@@ -60,9 +57,6 @@ def init_db():
 
 init_db()
 
-# ==========================================================
-# ICAI OFFICIAL SYLLABUS DATA
-# ==========================================================
 ICAI_SYLLABUS = {
     "Paper-1: Accounting (Official ICAI Syllabus)": [
         {"chapter": "Chapter 1: Theoretical Framework", "units": ["Unit 1: Meaning and Scope of Accounting", "Unit 2: Accounting Concepts, Principles and Conventions", "Unit 3: Capital and Revenue Expenditures and Receipts", "Unit 4: Contingent Assets and Contingent Liabilities", "Unit 5: Accounting Policies", "Unit 6: Accounting as a Measurement Discipline", "Unit 7: Accounting Standards"]},
@@ -162,6 +156,20 @@ PERSONAL_SYLLABUS = {
     ]
 }
 
+TARGET_ROWS = [
+    ("1. Accounts Lec", "accounts_lec"),
+    ("2. Law Lec", "law_lec"),
+    ("3. Quants Lec", "quants_lec"),
+    ("4. Eco Lec", "eco_lec"),
+    ("5. Accounts HW", "accounts_hw"),
+    ("6. Law HW", "law_hw"),
+    ("7. Quants HW", "quants_hw"),
+    ("8. Eco HW", "eco_hw"),
+    ("9. 2 Case Laws", "caselaws"),
+    ("10. 10m LR Practice", "lr_practice"),
+    ("11. 30m Law Rev", "law_revision")
+]
+
 SHARED_LAYOUT_HEADER = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -209,8 +217,10 @@ SHARED_LAYOUT_HEADER = '''
             box-shadow: 0 10px 25px rgba(59, 130, 246, 0.4);
             border-color: #fbbf24;
         }
-        .table-custom th { background-color: #1f2937; color: #fbbf24; text-align: center; vertical-align: middle; font-size: 0.8rem; }
+        .table-custom th { background-color: #1f2937; color: #fbbf24; text-align: center; vertical-align: middle; font-size: 0.8rem; white-space: nowrap; }
         .table-custom td { background-color: #111827; color: #ffffff; text-align: center; vertical-align: middle; font-size: 0.85rem; }
+        .sticky-col { position: sticky; left: 0; background-color: #1f2937 !important; z-index: 2; font-weight: bold; text-align: left !important; }
+        .timer-badge { font-family: 'Courier New', monospace; font-size: 2rem; color: #10b981; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -245,6 +255,7 @@ SHARED_LAYOUT_HEADER = '''
             </div>
         </div>
 
+        <!-- DIGITAL COUNTDOWN CLOCK -->
         <div class="bg-dark p-4 text-center mb-4 rounded-3 border border-secondary shadow-lg">
             <h5 class="text-light mb-3">⏳ TARGET EXAM COUNTDOWN: JAN 2027 ATTEMPT</h5>
             <div class="digital-clock-container">
@@ -258,6 +269,17 @@ SHARED_LAYOUT_HEADER = '''
                 <div class="clock-plate"><div class="clock-digit" id="hours">00</div><div class="clock-label">Hours</div></div>
                 <div class="clock-plate"><div class="clock-digit" id="minutes">00</div><div class="clock-label">Minutes</div></div>
                 <div class="clock-plate"><div class="clock-digit" id="seconds">00</div><div class="clock-label">Seconds</div></div>
+            </div>
+        </div>
+
+        <!-- STUDY STOPWATCH TIMER WIDGET -->
+        <div class="card bg-dark border-info p-3 mb-4 text-center">
+            <h6 class="text-info m-0 mb-2">⏱️ Live Study Time Stopwatch</h6>
+            <div class="timer-badge" id="studyTimerDisplay">00:00:00</div>
+            <div class="d-flex justify-content-center gap-2 mt-2">
+                <button class="btn btn-sm btn-success fw-bold" onclick="startStudyTimer()">▶️ Start Study</button>
+                <button class="btn btn-sm btn-warning fw-bold text-dark" onclick="pauseStudyTimer()">⏸️ Pause</button>
+                <button class="btn btn-sm btn-danger fw-bold" onclick="resetStudyTimer()">🔄 Reset</button>
             </div>
         </div>
 
@@ -277,6 +299,7 @@ SHARED_LAYOUT_FOOTER = '''
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // COUNTDOWN
         function updateDigitalClock() {
             const examDate = new Date("January 1, 2027 00:00:00").getTime();
             const now = new Date().getTime();
@@ -302,6 +325,36 @@ SHARED_LAYOUT_FOOTER = '''
         }
         setInterval(updateDigitalClock, 1000);
         updateDigitalClock();
+
+        // STUDY STOPWATCH LOGIC
+        let studySeconds = 0;
+        let studyInterval = null;
+
+        function startStudyTimer() {
+            if (!studyInterval) {
+                studyInterval = setInterval(() => {
+                    studySeconds++;
+                    let hrs = Math.floor(studySeconds / 3600);
+                    let mins = Math.floor((studySeconds % 3600) / 60);
+                    let secs = studySeconds % 60;
+                    document.getElementById('studyTimerDisplay').innerText = 
+                        hrs.toString().padStart(2, '0') + ':' + 
+                        mins.toString().padStart(2, '0') + ':' + 
+                        secs.toString().padStart(2, '0');
+                }, 1000);
+            }
+        }
+
+        function pauseStudyTimer() {
+            clearInterval(studyInterval);
+            studyInterval = null;
+        }
+
+        function resetStudyTimer() {
+            pauseStudyTimer();
+            studySeconds = 0;
+            document.getElementById('studyTimerDisplay').innerText = "00:00:00";
+        }
 
         function calculateOverallProgress() {
             const total = document.querySelectorAll('.lec-checkbox').length;
@@ -424,9 +477,9 @@ PERSONAL_PAGE_TEMPLATE = SHARED_LAYOUT_HEADER + '''
             <a href="/view_routine" class="text-decoration-none text-light">
                 <div class="action-card h-100 d-flex flex-column justify-content-center align-items-center p-5">
                     <div style="font-size: 3.5rem;" class="mb-3">✍️</div>
-                    <h3 class="text-info font-weight-bold mb-2">134-Day Daily Target Tracker</h3>
-                    <p class="text-muted">Full Page Table View: Day 1 to Day 134 daily lectures, HW, Case Laws & Revision tracker.</p>
-                    <span class="btn btn-info mt-2 fw-bold">Open 134-Day Routine Tracker ➔</span>
+                    <h3 class="text-info font-weight-bold mb-2">Day 1 to Day 134 Target Routine</h3>
+                    <p class="text-muted">Full Page Matrix Table View: Top Day headers (Day 1-134) & Target Rows for daily tracking.</p>
+                    <span class="btn btn-info mt-2 fw-bold">Open Target Routine ➔</span>
                 </div>
             </a>
         </div>
@@ -480,6 +533,7 @@ FULL_LECTURES_TEMPLATE = SHARED_LAYOUT_HEADER + '''
     {% endfor %}
 ''' + SHARED_LAYOUT_FOOTER
 
+# TRANSPOSED TABLE: DAYS ON TOP (DAY 1 TO DAY 134), TARGETS ON LEFT ROWS
 FULL_ROUTINE_TEMPLATE = SHARED_LAYOUT_HEADER + '''
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h4 class="text-info m-0">✍️ Day 1 to Day 134 Target Routine Planner</h4>
@@ -490,57 +544,22 @@ FULL_ROUTINE_TEMPLATE = SHARED_LAYOUT_HEADER + '''
         <table class="table table-dark table-bordered table-custom">
             <thead>
                 <tr>
-                    <th style="min-width: 90px;">Day</th>
-                    <th>1. Accounts Lec</th>
-                    <th>2. Law Lec</th>
-                    <th>3. Quants Lec</th>
-                    <th>4. Eco Lec</th>
-                    <th>5. Accounts HW</th>
-                    <th>6. Law HW</th>
-                    <th>7. Quants HW</th>
-                    <th>8. Eco HW</th>
-                    <th>9. 2 Case Laws</th>
-                    <th>10. 10m LR Practice</th>
-                    <th>11. 30m Law Rev</th>
+                    <th class="sticky-col text-warning">Daily Target Task</th>
+                    {% for day in range(1, 135) %}
+                        <th>Day {{ day }}</th>
+                    {% endfor %}
                 </tr>
             </thead>
             <tbody>
-                {% for day in range(1, 135) %}
+                {% for label, key_suffix in target_rows %}
                 <tr>
-                    <td class="fw-bold text-warning">Day {{ day }}</td>
-                    
-                    {% set k1 = 'day_' ~ day ~ '_accounts_lec' %}
-                    <td><input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ k1 }}" {% if user_progress.get(k1) == 1 %}checked{% endif %}></td>
-                    
-                    {% set k2 = 'day_' ~ day ~ '_law_lec' %}
-                    <td><input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ k2 }}" {% if user_progress.get(k2) == 1 %}checked{% endif %}></td>
-                    
-                    {% set k3 = 'day_' ~ day ~ '_quants_lec' %}
-                    <td><input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ k3 }}" {% if user_progress.get(k3) == 1 %}checked{% endif %}></td>
-                    
-                    {% set k4 = 'day_' ~ day ~ '_eco_lec' %}
-                    <td><input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ k4 }}" {% if user_progress.get(k4) == 1 %}checked{% endif %}></td>
-                    
-                    {% set k5 = 'day_' ~ day ~ '_accounts_hw' %}
-                    <td><input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ k5 }}" {% if user_progress.get(k5) == 1 %}checked{% endif %}></td>
-                    
-                    {% set k6 = 'day_' ~ day ~ '_law_hw' %}
-                    <td><input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ k6 }}" {% if user_progress.get(k6) == 1 %}checked{% endif %}></td>
-                    
-                    {% set k7 = 'day_' ~ day ~ '_quants_hw' %}
-                    <td><input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ k7 }}" {% if user_progress.get(k7) == 1 %}checked{% endif %}></td>
-                    
-                    {% set k8 = 'day_' ~ day ~ '_eco_hw' %}
-                    <td><input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ k8 }}" {% if user_progress.get(k8) == 1 %}checked{% endif %}></td>
-                    
-                    {% set k9 = 'day_' ~ day ~ '_caselaws' %}
-                    <td><input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ k9 }}" {% if user_progress.get(k9) == 1 %}checked{% endif %}></td>
-                    
-                    {% set k10 = 'day_' ~ day ~ '_lr_practice' %}
-                    <td><input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ k10 }}" {% if user_progress.get(k10) == 1 %}checked{% endif %}></td>
-                    
-                    {% set k11 = 'day_' ~ day ~ '_law_revision' %}
-                    <td><input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ k11 }}" {% if user_progress.get(k11) == 1 %}checked{% endif %}></td>
+                    <td class="sticky-col text-info">{{ label }}</td>
+                    {% for day in range(1, 135) %}
+                        {% set k = 'day_' ~ day ~ '_' ~ key_suffix %}
+                        <td>
+                            <input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ k }}" {% if user_progress.get(k) == 1 %}checked{% endif %}>
+                        </td>
+                    {% endfor %}
                 </tr>
                 {% endfor %}
             </tbody>
@@ -550,7 +569,7 @@ FULL_ROUTINE_TEMPLATE = SHARED_LAYOUT_HEADER + '''
     <div class="pro-tip-box shadow p-4 mt-3 mb-4">
         <h5 class="text-warning mb-2">🔥 Daily Execution Strategy</h5>
         <p class="m-0 text-light fs-6">
-            "Har din ke 11 targets tick karke poora Day Complete karo. Consistency hi CA Foundation pass karwayegi! Krishna bhai, target clear hai!" 💪
+            "Top me Day 1 se Day 134 scroll karke har din ke 11 targets ko easily tick karte jao. Study timer on karke padhai start karo, Krishna bhai!" 💪
         </p>
     </div>
 ''' + SHARED_LAYOUT_FOOTER
@@ -866,6 +885,7 @@ def view_routine():
         user_name=user_name, 
         user_mobile=user_mobile, 
         user_dob=user_dob,
+        target_rows=TARGET_ROWS,
         user_progress=progress_data
     )
 
