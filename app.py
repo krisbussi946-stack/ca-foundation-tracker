@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from flask import Flask, render_template_string, request, redirect, url_for, session, jsonify
 
 app = Flask(__name__)
-app.secret_key = 'ca_foundation_jan2027_master_chat_key_v3'
+app.secret_key = 'ca_foundation_jan2027_master_chat_key_v5'
 app.permanent_session_lifetime = timedelta(days=60)
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'castudy.db')
@@ -192,6 +192,7 @@ SHARED_LAYOUT_HEADER = '''
         .form-check-input:checked { background-color: #10b981; border-color: #10b981; }
         .progress-bar-custom { background: linear-gradient(90deg, #3b82f6, #10b981); }
         .gold-input { color: #fbbf24 !important; font-weight: bold; background: #0f172a; border: 1px solid #f59e0b; }
+        .gold-input::placeholder { color: #94a3b8 !important; font-weight: normal; }
         .manifestation-card { background: linear-gradient(135deg, #1e1b4b, #312e81); border: 2px solid #fbbf24; }
         .chat-box { background: #1e293b; border: 1px solid #334155; border-radius: 12px; height: 380px; overflow-y: auto; padding: 15px; }
         .chat-msg { background: #0f172a; border-left: 3px solid #38bdf8; padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; }
@@ -200,7 +201,6 @@ SHARED_LAYOUT_HEADER = '''
 </head>
 <body>
     <div class="container py-4">
-        <!-- Top Profile & Page Navigation -->
         <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom border-secondary">
             <div class="d-flex align-items-center gap-3">
                 <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center text-white fw-bold" style="width: 48px; height: 48px; font-size: 1.2rem;">
@@ -213,7 +213,6 @@ SHARED_LAYOUT_HEADER = '''
             </div>
 
             <div class="d-flex align-items-center gap-2 flex-wrap">
-                <!-- Telegram Channel Link -->
                 <a href="https://t.me/+T00sbNCe1eU3ZWQ1" target="_blank" class="btn btn-primary font-weight-bold shadow-sm">
                     ✈️ Join Telegram
                 </a>
@@ -232,10 +231,15 @@ SHARED_LAYOUT_HEADER = '''
             </div>
         </div>
 
-        <!-- Dynamic Digital Plate Countdown Header -->
         <div class="bg-dark p-4 text-center mb-4 rounded-3 border border-secondary shadow-lg">
             <h5 class="text-light mb-3">⏳ TARGET EXAM COUNTDOWN: JAN 2027 ATTEMPT</h5>
             <div class="digital-clock-container">
+                <!-- Total Days Left Dedicated Plate -->
+                <div class="clock-plate border-warning">
+                    <div class="clock-digit text-warning" id="total-days">000</div>
+                    <div class="clock-label text-warning">Total Days Left</div>
+                </div>
+
                 <div class="clock-plate"><div class="clock-digit" id="months">00</div><div class="clock-label">Months</div></div>
                 <div class="clock-plate"><div class="clock-digit" id="days">00</div><div class="clock-label">Days</div></div>
                 <div class="clock-plate"><div class="clock-digit" id="hours">00</div><div class="clock-label">Hours</div></div>
@@ -244,7 +248,6 @@ SHARED_LAYOUT_HEADER = '''
             </div>
         </div>
 
-        <!-- Overall Progress Bar -->
         <div class="card bg-dark border-secondary p-3 mb-4">
             <div class="d-flex justify-content-between align-items-center mb-2">
                 <h6 class="m-0 text-light">Overall Completion Progress</h6>
@@ -259,35 +262,26 @@ SHARED_LAYOUT_HEADER = '''
 SHARED_LAYOUT_FOOTER = '''
     </div>
 
-    <!-- Manifestation Modal -->
+    <!-- Self-Typing Manifestation Modal -->
     {% if not manifestation_done %}
-    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.85);">
+    <div id="manifestationModal" class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.85);">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content manifestation-card text-light p-4 shadow-lg">
                 <h3 class="text-center text-warning font-weight-bold">🌟 Future CA {{ user_name }}</h3>
                 <h5 class="text-center text-info mb-4">"My Manifestation"</h5>
                 
-                <form action="/save_manifestation" method="POST">
+                <form action="/save_manifestation" method="POST" onsubmit="hideManifestationModal()">
                     <div class="mb-3">
                         <label class="form-label">I will clear CA Foundation in</label>
-                        <select name="foundation_attempt" class="form-select gold-input" required>
-                            <option value="Jan 2027">Jan 2027 Attempt</option>
-                            <option value="May/June 2027">May/June 2027 Attempt</option>
-                        </select>
+                        <input type="text" name="foundation_attempt" class="form-control gold-input" placeholder="Type your Target Attempt (e.g. Jan 2027)" required autocomplete="off">
                     </div>
                     <div class="mb-3">
                         <label class="form-label">I will appear for CA Intermediate in</label>
-                        <select name="inter_attempt" class="form-select gold-input" required>
-                            <option value="Jan 2028">Jan 2028 Attempt</option>
-                            <option value="May 2028">May 2028 Attempt</option>
-                        </select>
+                        <input type="text" name="inter_attempt" class="form-control gold-input" placeholder="Type your Target Attempt (e.g. Jan 2028)" required autocomplete="off">
                     </div>
                     <div class="mb-4">
                         <label class="form-label">I will appear for CA Final in</label>
-                        <select name="final_attempt" class="form-select gold-input" required>
-                            <option value="Nov 2030">Nov 2030 Attempt</option>
-                            <option value="May 2031">May 2031 Attempt</option>
-                        </select>
+                        <input type="text" name="final_attempt" class="form-control gold-input" placeholder="Type your Target Attempt (e.g. Nov 2030)" required autocomplete="off">
                     </div>
 
                     <p class="text-center text-light italic" style="font-size: 0.85rem;">"Hard work beats talent when talent doesn't work hard. Your future self is counting on you!" 🔥</p>
@@ -300,17 +294,27 @@ SHARED_LAYOUT_FOOTER = '''
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        function hideManifestationModal() {
+            const modal = document.getElementById('manifestationModal');
+            if (modal) modal.style.display = 'none';
+        }
+
         function updateDigitalClock() {
             const examDate = new Date("January 1, 2027 00:00:00").getTime();
             const now = new Date().getTime();
             const diff = examDate - now;
 
             if (diff > 0) {
+                const totalDays = Math.floor(diff / (1000 * 60 * 60 * 24));
+
                 const months = Math.floor(diff / (1000 * 60 * 60 * 24 * 30.4375));
                 const days = Math.floor((diff % (1000 * 60 * 60 * 24 * 30.4375)) / (1000 * 60 * 60 * 24));
                 const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
                 const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
                 const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+                const tdElem = document.getElementById("total-days");
+                if(tdElem) tdElem.innerText = totalDays;
 
                 document.getElementById("months").innerText = months.toString().padStart(2, '0');
                 document.getElementById("days").innerText = days.toString().padStart(2, '0');
@@ -348,7 +352,6 @@ SHARED_LAYOUT_FOOTER = '''
             });
         });
 
-        // SELECT ALL / DESELECT ALL CHAPTER TOGGLE FUNCTION
         function toggleGroupCheckboxes(groupId) {
             const group = document.getElementById(groupId);
             if (!group) return;
@@ -468,7 +471,6 @@ PERSONAL_PAGE_TEMPLATE = SHARED_LAYOUT_HEADER + '''
     {% endfor %}
 ''' + SHARED_LAYOUT_FOOTER
 
-# COMMUNITY CHAT PAGE WITH MEDIA PREVIEW & PRIVACY
 CHAT_PAGE_TEMPLATE = SHARED_LAYOUT_HEADER + '''
     <h4 class="text-warning mb-3">💬 Student Discussion Forum (Media & Links Enabled)</h4>
     <div class="chat-box mb-3" id="chatWindow">
@@ -503,7 +505,6 @@ CHAT_PAGE_TEMPLATE = SHARED_LAYOUT_HEADER + '''
     </script>
 ''' + SHARED_LAYOUT_FOOTER
 
-# ADMIN PANEL WITH USER BLOCK/UNBLOCK ACTION
 ADMIN_PANEL_TEMPLATE = SHARED_LAYOUT_HEADER + '''
     <h4 class="text-warning mb-3">🛡️ Admin Control Panel</h4>
     <div class="table-responsive bg-dark p-3 rounded border border-secondary">
@@ -783,6 +784,20 @@ def send_chat():
 
     return redirect(url_for('community_chat'))
 
+@app.route('/save_manifestation', methods=['POST'])
+def save_manifestation():
+    if 'user_id' in session:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users SET manifestation_completed = 1 WHERE id = ?", (session['user_id'],))
+        conn.commit()
+        conn.close()
+    
+    ref = request.referrer
+    if ref and ('personal_planner' in ref):
+        return redirect(url_for('personal_planner'))
+    return redirect(url_for('home'))
+
 @app.route('/admin_panel')
 def admin_panel():
     if 'user_id' not in session:
@@ -867,16 +882,6 @@ def bulk_update_progress():
     conn.commit()
     conn.close()
     return jsonify({"success": True})
-
-@app.route('/save_manifestation', methods=['POST'])
-def save_manifestation():
-    if 'user_id' in session:
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("UPDATE users SET manifestation_completed = 1 WHERE id = ?", (session['user_id'],))
-        conn.commit()
-        conn.close()
-    return redirect(url_for('home'))
 
 @app.route('/update_progress', methods=['POST'])
 def update_progress():
