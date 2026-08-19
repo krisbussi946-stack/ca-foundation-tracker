@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from flask import Flask, render_template_string, request, redirect, url_for, session, jsonify
 
 app = Flask(__name__)
-app.secret_key = 'ca_foundation_jan2027_master_chat_key_v5'
+app.secret_key = 'ca_foundation_jan2027_pro_master_key_v6'
 app.permanent_session_lifetime = timedelta(days=60)
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'castudy.db')
@@ -24,7 +24,6 @@ def init_db():
             name TEXT NOT NULL,
             dob TEXT,
             pin TEXT NOT NULL,
-            manifestation_completed INTEGER DEFAULT 0,
             is_blocked INTEGER DEFAULT 0
         )
     ''')
@@ -51,8 +50,6 @@ def init_db():
     cols = [c[1] for c in cursor.fetchall()]
     if 'dob' not in cols:
         cursor.execute("ALTER TABLE users ADD COLUMN dob TEXT")
-    if 'manifestation_completed' not in cols:
-        cursor.execute("ALTER TABLE users ADD COLUMN manifestation_completed INTEGER DEFAULT 0")
     if 'is_blocked' not in cols:
         cursor.execute("ALTER TABLE users ADD COLUMN is_blocked INTEGER DEFAULT 0")
 
@@ -169,10 +166,10 @@ SHARED_LAYOUT_HEADER = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CA Foundation Study Portal</title>
+    <title>CA Foundation Target Portal</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background-color: #0b0f19; color: #f8fafc; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        body { background-color: #080c14; color: #f8fafc; font-family: 'Segoe UI', Tahoma, sans-serif; }
         .digital-clock-container { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
         .clock-plate {
             background: linear-gradient(180deg, #1e293b 50%, #0f172a 50%);
@@ -185,18 +182,17 @@ SHARED_LAYOUT_HEADER = '''
         }
         .clock-digit { font-size: 1.8rem; font-weight: 800; color: #fbbf24; font-family: 'Courier New', monospace; margin: 0; }
         .clock-label { font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
-        .subject-card { background-color: #1e293b; border: 1px solid #334155; border-radius: 12px; margin-bottom: 20px; }
-        .accordion-button { background-color: #334155 !important; color: #f8fafc !important; font-weight: 600; }
-        .accordion-button:not(.collapsed) { background-color: #475569 !important; color: #38bdf8 !important; }
-        .accordion-item { background-color: #1e293b; border-color: #334155; }
+        .subject-card { background-color: #111827; border: 1px solid #1f2937; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+        .accordion-button { background-color: #1f2937 !important; color: #f8fafc !important; font-weight: 600; }
+        .accordion-button:not(.collapsed) { background-color: #374151 !important; color: #38bdf8 !important; }
+        .accordion-item { background-color: #111827; border-color: #1f2937; }
         .form-check-input:checked { background-color: #10b981; border-color: #10b981; }
         .progress-bar-custom { background: linear-gradient(90deg, #3b82f6, #10b981); }
         .gold-input { color: #fbbf24 !important; font-weight: bold; background: #0f172a; border: 1px solid #f59e0b; }
-        .gold-input::placeholder { color: #94a3b8 !important; font-weight: normal; }
-        .manifestation-card { background: linear-gradient(135deg, #1e1b4b, #312e81); border: 2px solid #fbbf24; }
-        .chat-box { background: #1e293b; border: 1px solid #334155; border-radius: 12px; height: 380px; overflow-y: auto; padding: 15px; }
-        .chat-msg { background: #0f172a; border-left: 3px solid #38bdf8; padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; }
+        .chat-box { background: #111827; border: 1px solid #1f2937; border-radius: 12px; height: 380px; overflow-y: auto; padding: 15px; }
+        .chat-msg { background: #1f2937; border-left: 3px solid #38bdf8; padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; }
         .media-preview { max-width: 100%; max-height: 250px; border-radius: 8px; margin-top: 6px; }
+        .pro-tip-box { background: linear-gradient(135deg, #1e1b4b, #312e81); border-left: 4px solid #f59e0b; padding: 15px; border-radius: 8px; }
     </style>
 </head>
 <body>
@@ -234,7 +230,6 @@ SHARED_LAYOUT_HEADER = '''
         <div class="bg-dark p-4 text-center mb-4 rounded-3 border border-secondary shadow-lg">
             <h5 class="text-light mb-3">⏳ TARGET EXAM COUNTDOWN: JAN 2027 ATTEMPT</h5>
             <div class="digital-clock-container">
-                <!-- Total Days Left Dedicated Plate -->
                 <div class="clock-plate border-warning">
                     <div class="clock-digit text-warning" id="total-days">000</div>
                     <div class="clock-label text-warning">Total Days Left</div>
@@ -262,43 +257,8 @@ SHARED_LAYOUT_HEADER = '''
 SHARED_LAYOUT_FOOTER = '''
     </div>
 
-    <!-- Self-Typing Manifestation Modal -->
-    {% if not manifestation_done %}
-    <div id="manifestationModal" class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.85);">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content manifestation-card text-light p-4 shadow-lg">
-                <h3 class="text-center text-warning font-weight-bold">🌟 Future CA {{ user_name }}</h3>
-                <h5 class="text-center text-info mb-4">"My Manifestation"</h5>
-                
-                <form action="/save_manifestation" method="POST" onsubmit="hideManifestationModal()">
-                    <div class="mb-3">
-                        <label class="form-label">I will clear CA Foundation in</label>
-                        <input type="text" name="foundation_attempt" class="form-control gold-input" placeholder="Type your Target Attempt (e.g. Jan 2027)" required autocomplete="off">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">I will appear for CA Intermediate in</label>
-                        <input type="text" name="inter_attempt" class="form-control gold-input" placeholder="Type your Target Attempt (e.g. Jan 2028)" required autocomplete="off">
-                    </div>
-                    <div class="mb-4">
-                        <label class="form-label">I will appear for CA Final in</label>
-                        <input type="text" name="final_attempt" class="form-control gold-input" placeholder="Type your Target Attempt (e.g. Nov 2030)" required autocomplete="off">
-                    </div>
-
-                    <p class="text-center text-light italic" style="font-size: 0.85rem;">"Hard work beats talent when talent doesn't work hard. Your future self is counting on you!" 🔥</p>
-                    <button type="submit" class="btn btn-warning w-100 fw-bold py-2 mt-2">Lock My Goals 🚀</button>
-                </form>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        function hideManifestationModal() {
-            const modal = document.getElementById('manifestationModal');
-            if (modal) modal.style.display = 'none';
-        }
-
         function updateDigitalClock() {
             const examDate = new Date("January 1, 2027 00:00:00").getTime();
             const now = new Date().getTime();
@@ -306,7 +266,6 @@ SHARED_LAYOUT_FOOTER = '''
 
             if (diff > 0) {
                 const totalDays = Math.floor(diff / (1000 * 60 * 60 * 24));
-
                 const months = Math.floor(diff / (1000 * 60 * 60 * 24 * 30.4375));
                 const days = Math.floor((diff % (1000 * 60 * 60 * 24 * 30.4375)) / (1000 * 60 * 60 * 24));
                 const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
@@ -428,47 +387,95 @@ ICAI_PAGE_TEMPLATE = SHARED_LAYOUT_HEADER + '''
     {% endfor %}
 ''' + SHARED_LAYOUT_FOOTER
 
+# PRO DUAL-COLUMN PERSONAL PLANNER & DAILY ROUTINE
 PERSONAL_PAGE_TEMPLATE = SHARED_LAYOUT_HEADER + '''
-    <h4 class="text-warning mb-3">🎯 My Personal Lecture Planner Page</h4>
-    {% for subject, units in syllabus.items() %}
-    {% set s_idx = loop.index %}
-    <div class="subject-card p-3">
-        <h5 class="text-warning mb-3">📌 {{ subject }}</h5>
-        <div class="accordion" id="accordion-personal-{{ s_idx }}">
-            {% for unit_data in units %}
-            {% set u_idx = loop.index %}
-            {% set group_id = 'group-p-' ~ s_idx ~ '-' ~ u_idx %}
-            <div class="accordion-item" id="{{ group_id }}">
-                <h2 class="accordion-header d-flex align-items-center justify-content-between pe-3">
-                    <button class="accordion-button collapsed flex-grow-1" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-p-{{ s_idx }}-{{ u_idx }}">
-                        {{ unit_data.unit }}
-                    </button>
-                    <button class="btn btn-sm btn-outline-warning ms-2" type="button" onclick="toggleGroupCheckboxes('{{ group_id }}')">
-                        Select All ✅
-                    </button>
-                </h2>
-                <div id="collapse-p-{{ s_idx }}-{{ u_idx }}" class="accordion-collapse collapse">
-                    <div class="accordion-body">
-                        <div class="row">
-                            {% for lec in unit_data.lectures %}
-                            {% set lec_key = subject ~ '_' ~ unit_data.unit ~ '_' ~ lec %}
-                            <div class="col-md-4 col-sm-6 mb-2">
-                                <div class="form-check">
-                                    <input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ lec_key }}" id="chk-p-{{ s_idx }}-{{ u_idx }}-{{ loop.index }}" {% if user_progress.get(lec_key) == 1 %}checked{% endif %}>
-                                    <label class="form-check-label text-light" for="chk-p-{{ s_idx }}-{{ u_idx }}-{{ loop.index }}">
-                                        {{ lec }}
-                                    </label>
+    <h4 class="text-warning mb-3">🎯 My Personal Lecture & Daily Routine Planner</h4>
+    
+    <div class="row">
+        <!-- LEFT COLUMN: LECTURE-BY-LECTURE TRACKER -->
+        <div class="col-lg-7 mb-4">
+            <h5 class="text-info mb-3">📚 Chapter & Lecture Tracker</h5>
+            {% for subject, units in syllabus.items() %}
+            {% set s_idx = loop.index %}
+            <div class="subject-card p-3">
+                <h6 class="text-warning mb-3">📌 {{ subject }}</h6>
+                <div class="accordion" id="accordion-personal-{{ s_idx }}">
+                    {% for unit_data in units %}
+                    {% set u_idx = loop.index %}
+                    {% set group_id = 'group-p-' ~ s_idx ~ '-' ~ u_idx %}
+                    <div class="accordion-item" id="{{ group_id }}">
+                        <h2 class="accordion-header d-flex align-items-center justify-content-between pe-3">
+                            <button class="accordion-button collapsed flex-grow-1" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-p-{{ s_idx }}-{{ u_idx }}">
+                                {{ unit_data.unit }}
+                            </button>
+                            <button class="btn btn-sm btn-outline-warning ms-2" type="button" onclick="toggleGroupCheckboxes('{{ group_id }}')">
+                                Select All ✅
+                            </button>
+                        </h2>
+                        <div id="collapse-p-{{ s_idx }}-{{ u_idx }}" class="accordion-collapse collapse">
+                            <div class="accordion-body">
+                                <div class="row">
+                                    {% for lec in unit_data.lectures %}
+                                    {% set lec_key = subject ~ '_' ~ unit_data.unit ~ '_' ~ lec %}
+                                    <div class="col-md-6 mb-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ lec_key }}" id="chk-p-{{ s_idx }}-{{ u_idx }}-{{ loop.index }}" {% if user_progress.get(lec_key) == 1 %}checked{% endif %}>
+                                            <label class="form-check-label text-light" for="chk-p-{{ s_idx }}-{{ u_idx }}-{{ loop.index }}">
+                                                {{ lec }}
+                                            </label>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
                                 </div>
                             </div>
-                            {% endfor %}
                         </div>
                     </div>
+                    {% endfor %}
                 </div>
             </div>
             {% endfor %}
         </div>
+
+        <!-- RIGHT COLUMN: DAILY WATCH, HOMEWORK & PRO TIPS TRACKER -->
+        <div class="col-lg-5 mb-4">
+            <h5 class="text-success mb-3">✍️ Daily Practice & Routine Tracker</h5>
+            
+            <div class="subject-card p-3 mb-3">
+                <h6 class="text-warning">📺 Daily Lecture Watch Status</h6>
+                <p class="text-muted small">Tick daily when target videos are completed:</p>
+                {% for subject in ['Accounting', 'Business Law', 'Quantitative Aptitude', 'Business Economics'] %}
+                {% set watch_key = 'daily_watch_' ~ subject %}
+                <div class="form-check mb-2">
+                    <input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ watch_key }}" id="watch-{{ loop.index }}" {% if user_progress.get(watch_key) == 1 %}checked{% endif %}>
+                    <label class="form-check-label text-light" for="watch-{{ loop.index }}">
+                        Watched Today's {{ subject }} Lecture
+                    </label>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="subject-card p-3 mb-3">
+                <h6 class="text-info">📝 Homework & DPP Practice Tracker</h6>
+                <p class="text-muted small">Tick when homework/questions are completed:</p>
+                {% for subject in ['Accounting', 'Business Law', 'Quantitative Aptitude', 'Business Economics'] %}
+                {% set hw_key = 'daily_hw_' ~ subject %}
+                <div class="form-check mb-2">
+                    <input class="form-check-input lec-checkbox" type="checkbox" data-key="{{ hw_key }}" id="hw-{{ loop.index }}" {% if user_progress.get(hw_key) == 1 %}checked{% endif %}>
+                    <label class="form-check-label text-light" for="hw-{{ loop.index }}">
+                        Completed {{ subject }} Homework (HW / DPP)
+                    </label>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="pro-tip-box shadow">
+                <h6 class="text-warning mb-2">🔥 CA Foundation Pro Tip</h6>
+                <p class="m-0 text-light" style="font-size: 0.9rem;">
+                    "Consistency > Intensity! Law me written practice daily karo aur Quants me concepts samajhne ke baad minimum 30 questions solve karo. You got this Krishna bhai!" 💪
+                </p>
+            </div>
+        </div>
     </div>
-    {% endfor %}
 ''' + SHARED_LAYOUT_FOOTER
 
 CHAT_PAGE_TEMPLATE = SHARED_LAYOUT_HEADER + '''
@@ -550,10 +557,10 @@ LOGIN_TEMPLATE = '''
     <title>Login - Student Portal</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background: #090d16; color: #ffffff; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px 0; font-family: 'Segoe UI', Roboto, sans-serif; }
-        .login-card { background-color: #1e293b; border: 2px solid #3b82f6; border-radius: 16px; width: 100%; max-width: 420px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5); }
+        body { background: #080c14; color: #ffffff; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px 0; font-family: 'Segoe UI', Roboto, sans-serif; }
+        .login-card { background-color: #111827; border: 2px solid #3b82f6; border-radius: 16px; width: 100%; max-width: 420px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5); }
         .form-label { color: #f1f5f9 !important; font-weight: 600; font-size: 0.95rem; margin-bottom: 6px; }
-        .custom-input { background-color: #0f172a !important; color: #ffffff !important; border: 1px solid #475569 !important; border-radius: 8px; padding: 12px; font-size: 1rem; }
+        .custom-input { background-color: #0f172a !important; color: #ffffff !important; border: 1px solid #374151 !important; border-radius: 8px; padding: 12px; font-size: 1rem; }
         .custom-input:focus { border-color: #38bdf8 !important; box-shadow: 0 0 8px rgba(56, 189, 248, 0.4) !important; }
         .btn-custom { background: linear-gradient(135deg, #f59e0b, #d97706); border: none; color: #000000; font-weight: 700; padding: 12px; border-radius: 8px; font-size: 1.05rem; }
     </style>
@@ -617,7 +624,7 @@ def home():
     if 'user_id' in session:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute("SELECT name, mobile, dob, manifestation_completed, is_blocked FROM users WHERE id = ?", (session['user_id'],))
+        cursor.execute("SELECT name, mobile, dob, is_blocked FROM users WHERE id = ?", (session['user_id'],))
         row = cursor.fetchone()
         
         if row and row['is_blocked'] == 1:
@@ -627,7 +634,6 @@ def home():
         user_name = row['name'] if row else 'Student'
         user_mobile = row['mobile'] if row else ''
         user_dob = row['dob'] if row else ''
-        manifestation_done = row['manifestation_completed'] if row else 0
 
         cursor.execute("SELECT item_id, status FROM user_progress WHERE user_id = ?", (session['user_id'],))
         progress_data = {r['item_id']: r['status'] for r in cursor.fetchall()}
@@ -641,7 +647,6 @@ def home():
             user_name=user_name, 
             user_mobile=user_mobile, 
             user_dob=user_dob,
-            manifestation_done=manifestation_done,
             syllabus=ICAI_SYLLABUS, 
             user_progress=progress_data
         )
@@ -695,13 +700,12 @@ def personal_planner():
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT name, mobile, dob, manifestation_completed FROM users WHERE id = ?", (session['user_id'],))
+    cursor.execute("SELECT name, mobile, dob FROM users WHERE id = ?", (session['user_id'],))
     row = cursor.fetchone()
     
     user_name = row['name'] if row else 'Student'
     user_mobile = row['mobile'] if row else ''
     user_dob = row['dob'] if row else ''
-    manifestation_done = row['manifestation_completed'] if row else 0
 
     cursor.execute("SELECT item_id, status FROM user_progress WHERE user_id = ?", (session['user_id'],))
     progress_data = {r['item_id']: r['status'] for r in cursor.fetchall()}
@@ -715,7 +719,6 @@ def personal_planner():
         user_name=user_name, 
         user_mobile=user_mobile, 
         user_dob=user_dob,
-        manifestation_done=manifestation_done,
         syllabus=PERSONAL_SYLLABUS, 
         user_progress=progress_data
     )
@@ -727,7 +730,7 @@ def community_chat():
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT name, mobile, dob, manifestation_completed, is_blocked FROM users WHERE id = ?", (session['user_id'],))
+    cursor.execute("SELECT name, mobile, dob, is_blocked FROM users WHERE id = ?", (session['user_id'],))
     row = cursor.fetchone()
     
     if row and row['is_blocked'] == 1:
@@ -737,7 +740,6 @@ def community_chat():
     user_name = row['name'] if row else 'Student'
     user_mobile = row['mobile'] if row else ''
     user_dob = row['dob'] if row else ''
-    manifestation_done = row['manifestation_completed'] if row else 0
 
     cursor.execute("SELECT user_name, message, media_url, timestamp FROM group_chats ORDER BY id ASC")
     chat_messages = cursor.fetchall()
@@ -751,7 +753,6 @@ def community_chat():
         user_name=user_name,
         user_mobile=user_mobile,
         user_dob=user_dob,
-        manifestation_done=manifestation_done,
         chat_messages=chat_messages
     )
 
@@ -783,20 +784,6 @@ def send_chat():
     conn.close()
 
     return redirect(url_for('community_chat'))
-
-@app.route('/save_manifestation', methods=['POST'])
-def save_manifestation():
-    if 'user_id' in session:
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("UPDATE users SET manifestation_completed = 1 WHERE id = ?", (session['user_id'],))
-        conn.commit()
-        conn.close()
-    
-    ref = request.referrer
-    if ref and ('personal_planner' in ref):
-        return redirect(url_for('personal_planner'))
-    return redirect(url_for('home'))
 
 @app.route('/admin_panel')
 def admin_panel():
@@ -837,7 +824,6 @@ def admin_panel():
         user_name=row['name'],
         user_mobile=row['mobile'],
         user_dob=row['dob'],
-        manifestation_done=1,
         users_list=users_list
     )
 
