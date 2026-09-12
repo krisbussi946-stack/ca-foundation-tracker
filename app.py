@@ -6,7 +6,7 @@ from psycopg2.extras import RealDictCursor
 from flask import Flask, render_template_string, request, redirect, url_for, session, jsonify
 
 app = Flask(__name__)
-app.secret_key = 'ca_foundation_jan2027_pro_master_key_v10'
+app.secret_key = 'ca_foundation_jan2027_pro_master_key_v11'
 app.permanent_session_lifetime = timedelta(days=60)
 
 DATABASE_URL = os.environ.get('DATABASE_URL')
@@ -75,7 +75,7 @@ ICAI_SYLLABUS = {
         {"chapter": "Chapter 1: Indian Regulatory Framework", "units": ["Indian Regulatory Framework"]},
         {"chapter": "Chapter 2: The Indian Contract Act, 1872", "units": ["Unit 1: Nature of Contracts", "Unit 2: Consideration", "Unit 3: Other Essential Elements of a Contract", "Unit 4: Performance of Contract", "Unit 5: Breach of Contract and its Remedies", "Unit 6: Contingent and Quasi Contracts", "Unit 7: Contract of Indemnity and Guarantee", "Unit 8: Bailment and Pledge", "Unit 9: Agency"]},
         {"chapter": "Chapter 3: The Sale of Goods Act, 1930", "units": ["Unit 1: Formation of the Contract of Sale", "Unit 2: Conditions & Warranties", "Unit 3: Transfer of Ownership and Delivery of Goods", "Unit 4: Unpaid Seller"]},
-        {"chapter": "Chapter 4: The Indian Partnership Act, 1932", "units": ["Unit 1: General Nature of Partnership", "Unit 2: Relations of Partners", "Unit 3: Registration and Dissolution of a Firm"]},
+        {"chapter": "Chapter 4: Indian Partnership Act, 1932", "units": ["Unit 1: General Nature of Partnership", "Unit 2: Relations of Partners", "Unit 3: Registration and Dissolution of a Firm"]},
         {"chapter": "Chapter 5: The Limited Liability Partnership Act, 2008", "units": ["The Limited Liability Partnership Act, 2008"]},
         {"chapter": "Chapter 6: The Companies Act, 2013", "units": ["The Companies Act, 2013"]},
         {"chapter": "Chapter 7: The Negotiable Instruments Act, 1881", "units": ["The Negotiable Instruments Act, 1881"]}
@@ -255,9 +255,9 @@ SHARED_LAYOUT_HEADER = '''
             </div>
         </div>
 
-        <!-- DIGITAL COUNTDOWN CLOCK -->
+        <!-- 31 OCTOBER SYLLABUS DEADLINE DIGITAL COUNTDOWN -->
         <div class="bg-dark p-4 text-center mb-4 rounded-3 border border-secondary shadow-lg">
-            <h5 class="text-light mb-3">⏳ TARGET EXAM COUNTDOWN: JAN 2027 ATTEMPT</h5>
+            <h5 class="text-light mb-3">⏳ TARGET SYLLABUS COMPLETION: 31 OCTOBER 2026</h5>
             <div class="digital-clock-container">
                 <div class="clock-plate border-warning">
                     <div class="clock-digit text-warning" id="total-days">000</div>
@@ -299,11 +299,11 @@ SHARED_LAYOUT_FOOTER = '''
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // COUNTDOWN
         function updateDigitalClock() {
-            const examDate = new Date("January 1, 2027 00:00:00").getTime();
+            // Deadline fixed strictly to 31 October 2026 midnight
+            const targetDate = new Date("October 31, 2026 23:59:59").getTime();
             const now = new Date().getTime();
-            const diff = examDate - now;
+            const diff = targetDate - now;
 
             if (diff > 0) {
                 const totalDays = Math.floor(diff / (1000 * 60 * 60 * 24));
@@ -321,12 +321,19 @@ SHARED_LAYOUT_FOOTER = '''
                 document.getElementById("hours").innerText = hours.toString().padStart(2, '0');
                 document.getElementById("minutes").innerText = minutes.toString().padStart(2, '0');
                 document.getElementById("seconds").innerText = seconds.toString().padStart(2, '0');
+            } else {
+                const tdElem = document.getElementById("total-days");
+                if(tdElem) tdElem.innerText = "0";
+                document.getElementById("months").innerText = "00";
+                document.getElementById("days").innerText = "00";
+                document.getElementById("hours").innerText = "00";
+                document.getElementById("minutes").innerText = "00";
+                document.getElementById("seconds").innerText = "00";
             }
         }
         setInterval(updateDigitalClock, 1000);
         updateDigitalClock();
 
-        // STUDY STOPWATCH LOGIC
         let studySeconds = 0;
         let studyInterval = null;
 
@@ -533,7 +540,6 @@ FULL_LECTURES_TEMPLATE = SHARED_LAYOUT_HEADER + '''
     {% endfor %}
 ''' + SHARED_LAYOUT_FOOTER
 
-# TRANSPOSED TABLE: DAYS ON TOP (DAY 1 TO DAY 134), TARGETS ON LEFT ROWS
 FULL_ROUTINE_TEMPLATE = SHARED_LAYOUT_HEADER + '''
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h4 class="text-info m-0">✍️ Day 1 to Day 134 Target Routine Planner</h4>
@@ -664,7 +670,7 @@ LOGIN_TEMPLATE = '''
 <body>
     <div class="login-card p-4 shadow-lg">
         <h3 class="text-center text-warning mb-1 fw-bold">🎓 Student Portal</h3>
-        <p class="text-center text-light mb-4" style="font-size: 0.85rem;">CA Foundation Jan 2027 Target Planner</p>
+        <p class="text-center text-light mb-4" style="font-size: 0.85rem;">CA Foundation Target Planner</p>
 
         {% if error %}
             <div class="alert alert-danger p-2 text-center fw-bold" style="font-size: 0.9rem;">{{ error }}</div>
